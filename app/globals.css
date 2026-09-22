@@ -1,0 +1,249 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens -- design.md sections 2 and 4. Light only.
+ * Brand: Monad purple #836EF9. Buttons/text use a deeper step (#6D5AF0) so
+ * white labels and purple text keep >= 4.5:1 contrast.
+ */
+:root {
+  --bg: 248 247 252;
+  --text: 17 14 36;
+  --text-muted: 98 94 122;
+  --text-emphasis: 109 90 240;
+  --surface-solid: 255 255 255;
+  --brand: 131 110 249;
+  --primary: 109 90 240;
+  --primary-hover: 92 72 228;
+  --deep: 32 0 82;
+  --tint: 241 238 255;
+  --positive: 14 138 68;
+  --negative: 217 48 54;
+  --caution: 180 100 20;
+  --focus-ring: 131 110 249;
+
+  --glass: rgba(255, 255, 255, 0.66);
+  --glass-strong: rgba(255, 255, 255, 0.86);
+  --border-glass: rgba(32, 0, 82, 0.07);
+  --edge-highlight: rgba(255, 255, 255, 1);
+  --glow-a: rgba(131, 110, 249, 0.22);
+  --glow-b: rgba(190, 150, 255, 0.18);
+  --scrim: rgba(17, 14, 36, 0.3);
+  --shadow: 0 1px 2px rgba(32, 0, 82, 0.04), 0 10px 30px rgba(32, 0, 82, 0.07);
+  --shadow-strong: 0 2px 6px rgba(32, 0, 82, 0.05), 0 30px 70px rgba(32, 0, 82, 0.16);
+  --shadow-primary: 0 10px 28px rgba(109, 90, 240, 0.35);
+
+  color-scheme: light;
+}
+
+html {
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100dvh;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+::selection {
+  background: rgb(var(--brand) / 0.25);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--focus-ring));
+  outline-offset: 2px;
+}
+
+@layer components {
+  /* Soft static field behind the glass (design.md 4.2). Never animated. */
+  .bg-field {
+    background:
+      radial-gradient(52rem 38rem at 8% -12%, var(--glow-a), transparent 60%),
+      radial-gradient(44rem 34rem at 100% 108%, var(--glow-b), transparent 60%),
+      rgb(var(--bg));
+    background-attachment: fixed;
+  }
+
+  .glass-thin,
+  .glass,
+  .glass-thick {
+    border: 1px solid var(--border-glass);
+    box-shadow: inset 0 1px 0 var(--edge-highlight);
+  }
+  .glass-thin {
+    background: var(--glass);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+  }
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    box-shadow: inset 0 1px 0 var(--edge-highlight), var(--shadow);
+  }
+  .glass-thick {
+    background: var(--glass-strong);
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    box-shadow: inset 0 1px 0 var(--edge-highlight), var(--shadow-strong);
+  }
+
+  .shadow-primary {
+    box-shadow: var(--shadow-primary);
+  }
+
+  /*
+   * Liquid glass for floating nav bars: mostly clear with only a light blur
+   * (content behind stays recognisable), a bright specular rim on top, a
+   * faint inner glow, and a soft sheen across the top half.
+   */
+  .liquid-glass {
+    position: relative;
+    isolation: isolate;
+    background: linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.42) 0%,
+      rgba(255, 255, 255, 0.16) 45%,
+      rgba(255, 255, 255, 0.28) 100%
+    );
+    backdrop-filter: blur(6px) saturate(180%) brightness(1.04);
+    -webkit-backdrop-filter: blur(6px) saturate(180%) brightness(1.04);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+      inset 0 0 24px rgba(255, 255, 255, 0.18),
+      0 10px 36px rgba(32, 0, 82, 0.1);
+  }
+  .liquid-glass::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 55%);
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /*
+   * Pointer-following light for liquid glass bars (Apple Liquid Glass style).
+   * LiquidBar sets --mx/--my on pointer move; the highlight fades in on hover.
+   */
+  .liquid-interactive {
+    transition: box-shadow 300ms ease, transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .liquid-interactive::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background:
+      radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.7), transparent 65%),
+      radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), rgb(var(--brand) / 0.1), transparent 70%);
+    opacity: 0;
+    transition: opacity 350ms ease;
+    pointer-events: none;
+    z-index: -1;
+  }
+  .liquid-interactive:hover::after {
+    opacity: 1;
+  }
+  .liquid-interactive:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 1),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.3),
+      inset 0 0 28px rgba(255, 255, 255, 0.24),
+      0 14px 44px rgba(32, 0, 82, 0.14);
+  }
+
+  /* The glass "lens" that glides under hovered nav items. */
+  .liquid-pill {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.4) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 1),
+      inset 0 -1px 2px rgb(var(--deep) / 0.06),
+      0 4px 14px rgb(var(--deep) / 0.12);
+    backdrop-filter: blur(4px) saturate(180%);
+    -webkit-backdrop-filter: blur(4px) saturate(180%);
+  }
+
+  /* Feature cards: a low wash of Monad purple fading into white. */
+  .card-wash {
+    background:
+      radial-gradient(120% 90% at 0% 0%, rgb(var(--brand) / 0.16) 0%, transparent 60%),
+      linear-gradient(160deg, rgb(var(--tint) / 0.9) 0%, rgba(255, 255, 255, 0.85) 60%, rgba(255, 255, 255, 0.95) 100%);
+    border: 1px solid rgb(var(--brand) / 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1), var(--shadow);
+  }
+  .card-wash-alt {
+    background:
+      radial-gradient(120% 90% at 100% 0%, rgb(var(--brand) / 0.16) 0%, transparent 60%),
+      linear-gradient(200deg, rgb(var(--tint) / 0.9) 0%, rgba(255, 255, 255, 0.85) 60%, rgba(255, 255, 255, 0.95) 100%);
+    border: 1px solid rgb(var(--brand) / 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1), var(--shadow);
+  }
+
+  /* Headline accent: Monad purple into a soft violet-pink. */
+  .text-gradient {
+    background: linear-gradient(100deg, rgb(var(--primary)) 0%, rgb(var(--brand)) 45%, #c07bff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Brand gradient fill for hero surfaces and the closing CTA. */
+  .bg-brand-gradient {
+    background:
+      radial-gradient(60% 80% at 0% 0%, rgb(var(--brand)) 0%, transparent 70%),
+      radial-gradient(60% 80% at 100% 100%, #b77bff 0%, transparent 70%),
+      rgb(var(--primary));
+  }
+
+  /* Press feedback on pointer-down, instantly (design.md 6). */
+  .pressable {
+    transition: transform 120ms cubic-bezier(0.2, 0, 0, 1), background-color 150ms ease,
+      box-shadow 200ms ease, opacity 150ms ease, color 150ms ease;
+  }
+  .pressable:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Solid fallbacks: no backdrop-filter support, reduced transparency, high contrast. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-thin, .glass, .glass-thick, .liquid-glass { background: rgb(var(--surface-solid)); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass-thin, .glass, .glass-thick, .liquid-glass {
+    background: rgb(var(--surface-solid));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+@media (prefers-contrast: more) {
+  .glass-thin, .glass, .glass-thick, .liquid-glass {
+    background: rgb(var(--surface-solid));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1.5px solid rgb(var(--text) / 0.4);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+  .pressable:active:not(:disabled) { transform: none; }
+}

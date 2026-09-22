@@ -1,0 +1,23 @@
+# Secrets -- never commit
+.env
+.env.local
+.env.*.local
+
+# Dependencies and builds
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Foundry
+contracts/out/
+# forge writes "sensitive values" here on deploy
+contracts/cache/
+# installed with `forge install ... --no-git`
+contracts/lib/
+contracts/broadcast/*/31337/
+
+# OS / editor
+.DS_Store
+Thumbs.db
