@@ -16,8 +16,11 @@ export function privy(): PrivyClient {
     client = new PrivyClient({
       appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID as string,
       appSecret: process.env.PRIVY_APP_SECRET as string,
-      // Optional: with the key set, tokens are verified locally instead of
-      // fetching Privy's JWKS over the network.
+      // Optional speed-up: with the key set, tokens are verified locally
+      // instead of fetching Privy's JWKS over the network. It must be the
+      // full PEM with REAL line breaks and no surrounding quotes -- a
+      // mangled value makes every request fail with 401, so leaving it
+      // unset is the safer default.
       jwtVerificationKey: process.env.PRIVY_JWT_VERIFICATION_KEY || undefined,
     });
   }
@@ -43,31 +46,8 @@ export async function getAuthenticatedPrivyId(req: Request): Promise<string | nu
   } catch (err) {
     // Logged (not returned) so a 401 can be diagnosed from the server logs
     // without telling the caller anything useful.
-    const key = process.env.PRIVY_JWT_VERIFICATION_KEY ?? "";
-    console.error("Privy token verification failed:", err instanceof Error ? err.message : err, {
-      configuredAppId: process.env.NEXT_PUBLIC_PRIVY_APP_ID,
-      // Token claims, read WITHOUT verifying -- just to compare against config.
-      tokenClaims: decodeClaims(token),
-      verificationKey: {
-        length: key.length,
-        startsWithPem: key.startsWith("-----BEGIN"),
-        hasRealNewlines: key.includes("\n"),
-        hasEscapedNewlines: key.includes("\\n"),
-        isQuoted: key.startsWith('"') || key.startsWith("'"),
-      },
-    });
+    console.error("Privy token verification failed:", err instanceof Error ? err.message : err);
     return null;
-  }
-}
-
-/** Reads a JWT's claims without verifying it -- diagnostics only, never trusted. */
-function decodeClaims(token: string) {
-  try {
-    const [, payload] = token.split(".");
-    const { aud, iss, exp, sub } = JSON.parse(Buffer.from(payload, "base64url").toString());
-    return { aud, iss, exp, expired: typeof exp === "number" && exp * 1000 < Date.now(), sub };
-  } catch {
-    return "unreadable";
   }
 }
 
