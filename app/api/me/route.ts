@@ -6,10 +6,6 @@ import type { LinkedAccount } from "@privy-io/node";
 
 type LinkedAccountGoogleOAuth = Extract<LinkedAccount, { type: "google_oauth" }>;
 type LinkedAccountSmartWallet = Extract<LinkedAccount, { type: "smart_wallet" }>;
-type LinkedAccountEthereumEmbeddedWallet = Extract<
-  LinkedAccount,
-  { type: "wallet"; connector_type: "embedded"; chain_type: "ethereum" }
->;
 
 /**
  * Sign-up / account sync. The app calls this right after Privy login; it
@@ -34,44 +30,47 @@ export async function POST(req: NextRequest) {
     (a): a is LinkedAccountGoogleOAuth => a.type === "google_oauth"
   );
 
-  // Prefer the smart wallet if Privy smart wallets are enabled (that's the
-  // gas-sponsored account that should hold funds), else the embedded wallet.
-  // NOTE: revisit when the sponsored-transfer work (part 2) lands -- the
-  // address stored here must be the one transfers are sent from/to.
-  const smartWallet = accounts.find(
+  // Only the smart wallet: it's the gas-sponsored account that sends tips
+  // and holds the balance the app shows, so it's the address tips and escrow
+  // claims are paid to. Never fall back to the embedded wallet (the smart
+  // wallet's signer) -- money sent there wouldn't appear in the app.
+  const walletAddress = accounts.find(
     (a): a is LinkedAccountSmartWallet => a.type === "smart_wallet"
-  );
-  const embeddedWallet = accounts.find(
-    (a): a is LinkedAccountEthereumEmbeddedWallet =>
-      a.type === "wallet" &&
-      "connector_type" in a &&
-      a.connector_type === "embedded" &&
-      a.chain_type === "ethereum"
-  );
-  const walletAddress = (smartWallet ?? embeddedWallet)?.address;
+  )?.address;
 
   if (!google) {
     return NextResponse.json({ error: "Sign in with Google to continue" }, { status: 400 });
   }
   if (!walletAddress) {
-    // Privy creates the embedded wallet client-side just after login, so it
-    // can briefly not exist yet. The client retries on 409.
+    // Privy creates the smart wallet client-side just after login, so it can
+    // briefly not exist yet. The client retries on 409.
     return NextResponse.json({ error: "Account still being set up" }, { status: 409 });
   }
 
   const db = supabaseServer();
-  const { data: user, error } = await db
+  const fields = {
+    privy_id: privyId,
+    google_id: google.subject,
+    wallet_address: walletAddress.toLowerCase(),
+  };
+
+  // Accounts created before privy_id existed have it NULL (supabase/migrate.sql
+  // can't backfill it). Adopt that row by google_id instead of inserting a
+  // second one, which would collide on the unique google_id.
+  const { data: legacy, error: legacyErr } = await db
     .from("users")
-    .upsert(
-      {
-        privy_id: privyId,
-        google_id: google.subject,
-        wallet_address: walletAddress.toLowerCase(),
-      },
-      { onConflict: "privy_id" }
-    )
-    .select("id, mode")
-    .single();
+    .select("id")
+    .eq("google_id", google.subject)
+    .is("privy_id", null)
+    .maybeSingle();
+  if (legacyErr) {
+    console.error("users legacy lookup failed", legacyErr);
+    return NextResponse.json({ error: "Could not set up your account" }, { status: 500 });
+  }
+
+  const { data: user, error } = legacy
+    ? await db.from("users").update(fields).eq("id", legacy.id).select("id, mode").single()
+    : await db.from("users").upsert(fields, { onConflict: "privy_id" }).select("id, mode").single();
 
   if (error || !user) {
     console.error("users upsert failed", error);

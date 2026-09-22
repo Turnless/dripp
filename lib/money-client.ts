@@ -16,13 +16,88 @@ export const announceMoneyChanged = () => {
 
 type TipArgs = { platform: "youtube" | "kick"; toUsername: string; amountUsd: number };
 type Call = { to: `0x${string}`; data: `0x${string}` };
+type AuthedFetch = ReturnType<typeof useAuthedFetch>;
+
+/**
+ * Tips whose money has moved but that the server hasn't recorded yet. Kept
+ * in localStorage so a closed tab or lost connection doesn't lose them: the
+ * app retries them on the next load (useFinishUnconfirmedTips), and the
+ * server's reconcile job finds them onchain regardless.
+ */
+type Unconfirmed = { intentId: string; txHash: `0x${string}`; at: number };
+const UNCONFIRMED_KEY = "dripp:unconfirmed-tips";
+const UNCONFIRMED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function loadUnconfirmed(): Unconfirmed[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(UNCONFIRMED_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (u): u is Unconfirmed =>
+        typeof u?.intentId === "string" &&
+        typeof u?.txHash === "string" &&
+        typeof u?.at === "number" &&
+        Date.now() - u.at < UNCONFIRMED_MAX_AGE_MS
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveUnconfirmed(list: Unconfirmed[]) {
+  try {
+    if (list.length) localStorage.setItem(UNCONFIRMED_KEY, JSON.stringify(list));
+    else localStorage.removeItem(UNCONFIRMED_KEY);
+  } catch {}
+}
+
+const rememberUnconfirmed = (u: Unconfirmed) =>
+  saveUnconfirmed([...loadUnconfirmed().filter((x) => x.intentId !== u.intentId), u]);
+const forgetUnconfirmed = (intentId: string) =>
+  saveUnconfirmed(loadUnconfirmed().filter((x) => x.intentId !== intentId));
+
+/**
+ * One call to /api/tip/confirm (see that route for the status codes):
+ *   recorded -- saved
+ *   not_sent -- the transaction didn't move the money, so it's safe to retry the tip
+ *   gone     -- nothing more to do for this one (unknown or already saved)
+ *   retry    -- not visible yet, or a temporary problem: ask again later
+ */
+async function confirmOnce(
+  authedFetch: AuthedFetch,
+  u: Unconfirmed
+): Promise<{ outcome: "recorded" | "not_sent" | "gone" | "retry"; message?: string }> {
+  let res: Response;
+  try {
+    res = await authedFetch("/api/tip/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ intentId: u.intentId, txHash: u.txHash }),
+    });
+  } catch {
+    return { outcome: "retry" };
+  }
+  if (res.status === 200) return { outcome: "recorded" };
+  if (res.status === 422) return { outcome: "not_sent", message: await readError(res) };
+  if (res.status === 400 || res.status === 404 || res.status === 409) return { outcome: "gone" };
+  return { outcome: "retry" };
+}
+
+const CONFIRM_ATTEMPTS = 3;
 
 /**
  * Sends a tip gas-free from the user's smart wallet:
- *   1. /api/tip/prepare -> the exact calls (transfer, or approve + escrow deposit)
+ *   1. /api/tip/prepare -> a tip intent + the exact calls (transfer, or
+ *      approve + escrow deposit)
  *   2. smart wallet sends them as ONE sponsored operation (no Privy popup --
  *      showWalletUIs is false in app/providers.tsx)
  *   3. /api/tip/confirm -> server verifies the transaction onchain, then records it
+ *
+ * Once step 2 succeeds the money has moved, so from then on this never
+ * throws an error that invites sending again -- except when the server has
+ * checked the mined transaction and the payment isn't in it (nothing moved).
+ * If confirming keeps failing, the tip is kept for a later retry and still
+ * reported as sent.
  */
 export function useSendTip() {
   const { client } = useSmartWallets();
@@ -38,28 +113,67 @@ export function useSendTip() {
         body: JSON.stringify(tip),
       });
       if (!prep.ok) throw new Error(await readError(prep));
-      const { calls } = (await prep.json()) as { calls: Call[] };
+      const { intentId, kind, calls } = (await prep.json()) as {
+        intentId: string;
+        kind: "direct" | "escrow";
+        calls: Call[];
+      };
 
       let txHash: `0x${string}`;
       try {
         txHash = await client.sendTransaction({ calls });
       } catch (err) {
         console.error("smart wallet send failed", err);
-        throw new Error("The payment didn't go through. Check your balance and try again.");
+        throw new Error("We couldn't complete the payment. Check your balance and activity before trying again.");
       }
 
-      const conf = await authedFetch("/api/tip/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...tip, txHash }),
-      });
-      if (!conf.ok) throw new Error(await readError(conf));
-      const { status } = (await conf.json()) as { status: "settled" | "pending" };
+      const sent: Unconfirmed = { intentId, txHash, at: Date.now() };
+      rememberUnconfirmed(sent);
+      for (let attempt = 0; attempt < CONFIRM_ATTEMPTS; attempt++) {
+        const { outcome, message } = await confirmOnce(authedFetch, sent);
+        if (outcome === "recorded" || outcome === "gone") {
+          forgetUnconfirmed(intentId);
+          break;
+        }
+        if (outcome === "not_sent") {
+          forgetUnconfirmed(intentId);
+          throw new Error(message ?? "That payment didn't go through, so nothing was sent. Please try again.");
+        }
+        if (attempt < CONFIRM_ATTEMPTS - 1) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      }
+
       announceMoneyChanged();
-      return status;
+      return kind === "direct" ? "settled" : "pending";
     },
     [client, authedFetch]
   );
+}
+
+let finishStarted = false;
+
+/**
+ * Once per page load, retries saving tips that were sent but not yet
+ * recorded (see Unconfirmed above). Mounted by the signed-in app shell.
+ */
+export function useFinishUnconfirmedTips() {
+  const authedFetch = useAuthedFetch();
+  useEffect(() => {
+    if (finishStarted) return;
+    const list = loadUnconfirmed();
+    saveUnconfirmed(list); // drops expired entries
+    if (!list.length) return;
+    finishStarted = true;
+    (async () => {
+      let changed = false;
+      for (const u of list) {
+        const { outcome } = await confirmOnce(authedFetch, u);
+        if (outcome === "retry") continue;
+        forgetUnconfirmed(u.intentId);
+        if (outcome === "recorded") changed = true;
+      }
+      if (changed) announceMoneyChanged();
+    })();
+  }, [authedFetch]);
 }
 
 // Shares one request per URL between components and across React's

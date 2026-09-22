@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 import { getAuthenticatedUser } from "@/lib/privy-server";
-import { WithdrawSchema, planWithdrawal } from "@/lib/withdraw-plan";
+import { WithdrawSchema, isExternalDestination, planWithdrawal } from "@/lib/withdraw-plan";
 import { centsToUnits } from "@/lib/chain";
 import { getUsdcBalanceUnits } from "@/lib/wallet-server";
 
@@ -26,6 +26,10 @@ export async function POST(req: NextRequest) {
   const plan = planWithdrawal(parsed.data);
   if (!plan) {
     return NextResponse.json({ error: "Withdrawals aren't available yet" }, { status: 501 });
+  }
+
+  if (!(await isExternalDestination(plan.destination))) {
+    return NextResponse.json({ error: "That withdrawal destination isn't supported" }, { status: 400 });
   }
 
   const balance = await getUsdcBalanceUnits(getAddress(user.wallet_address));

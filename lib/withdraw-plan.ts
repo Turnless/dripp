@@ -2,6 +2,8 @@ import { z } from "zod";
 import { encodeFunctionData, getAddress, isAddress } from "viem";
 import { USDC_ADDRESS, centsToUnits, minimalErc20Abi } from "./chain";
 import { withdrawalFee } from "./fees";
+import { supabaseServer } from "./supabase";
+import { tipVaultAddress } from "./tipvault";
 
 export const WithdrawSchema = z.object({
   amountUsd: z
@@ -49,4 +51,27 @@ export function planWithdrawal(input: WithdrawInput) {
   ];
 
   return { treasury, destination, cents, feeCents: fee, feeUnits, payoutUnits, calls };
+}
+
+/**
+ * A withdrawal pays money OUT of dripp, so its destination can't be an
+ * address inside dripp: another user's account, the TipVault escrow, the
+ * treasury, or the USDC contract itself. Without this, a transfer to
+ * another user could be recorded as a withdrawal (and the escrow/treasury
+ * cases make no sense as a cash-out). Returns true if the destination is OK.
+ */
+export async function isExternalDestination(destination: `0x${string}`): Promise<boolean> {
+  const dest = getAddress(destination);
+  const internal = [USDC_ADDRESS, tipVaultAddress(), treasuryAddress()].filter(
+    (a): a is `0x${string}` => !!a && isAddress(a)
+  );
+  if (internal.some((a) => getAddress(a) === dest)) return false;
+
+  const { data, error } = await supabaseServer()
+    .from("users")
+    .select("id")
+    .eq("wallet_address", dest.toLowerCase())
+    .limit(1);
+  if (error) throw error;
+  return (data ?? []).length === 0;
 }

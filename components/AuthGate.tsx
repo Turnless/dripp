@@ -15,8 +15,9 @@ type Me = { mode: Mode | null; links: PlatformLink[] };
 type SetupState = { status: "loading" } | { status: "error" } | { status: "ready"; me: Me };
 
 /**
- * Creates/refreshes the signed-in user's account row via /api/me. The wallet
- * is created client-side just after login, so a 409 means "not yet" -- retry.
+ * Creates/refreshes the signed-in user's account row via /api/me. The smart
+ * wallet is created client-side just after login, so a 409 means "not yet" --
+ * retry (for up to ~30s).
  */
 function useAccountSetup(enabled: boolean) {
   const { getAccessToken } = usePrivy();
@@ -32,7 +33,7 @@ function useAccountSetup(enabled: boolean) {
     setState({ status: "loading" });
 
     (async () => {
-      for (let i = 0; i < 6 && !cancelled; i++) {
+      for (let i = 0; i < 20 && !cancelled; i++) {
         try {
           const token = await getAccessToken();
           const res = await fetch("/api/me", {

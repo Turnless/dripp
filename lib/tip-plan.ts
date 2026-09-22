@@ -2,7 +2,7 @@ import { z } from "zod";
 import { encodeFunctionData, getAddress } from "viem";
 import { USDC_ADDRESS, centsToUnits, minimalErc20Abi } from "./chain";
 import { handleHash, tipVaultAbi, tipVaultAddress } from "./tipvault";
-import { resolveRecipient } from "./username-resolve";
+import { normalizeHandle, resolveRecipient } from "./username-resolve";
 
 // Upper bound per tip -- limits the damage of a compromised session or a
 // client bug. Keep in sync with MAX_TIP_CENTS in lib/fees.ts.
@@ -22,16 +22,25 @@ export type TipInput = z.infer<typeof TipSchema>;
 type Call = { to: `0x${string}`; data: `0x${string}` };
 
 export type TipPlan =
-  | { kind: "direct"; recipientId: string; recipientWallet: `0x${string}`; units: bigint; calls: Call[] }
+  | {
+      kind: "direct";
+      platform: "youtube" | "kick";
+      username: string;
+      recipientId: string;
+      recipientWallet: `0x${string}`;
+      units: bigint;
+      calls: Call[];
+    }
   | { kind: "escrow"; platform: "youtube" | "kick"; username: string; hash: `0x${string}`; units: bigint; calls: Call[] };
 
 export type PlanError = { error: string; status: number };
 
 /**
  * Works out where a tip goes and the exact onchain calls that move it.
- * Used by both /api/tip/prepare (to hand the calls to the browser) and
- * /api/tip/confirm (to re-derive what the transaction must contain), so the
- * two can never disagree.
+ * Called once, by /api/tip/prepare, which saves the result as a tip_intents
+ * row; /api/tip/confirm checks the transaction against that saved row rather
+ * than working the recipient out again (it could have changed in between,
+ * e.g. the creator linking their channel mid-send).
  *
  * Tips are free: the recipient gets the full amount (fee is on withdrawals).
  */
@@ -48,6 +57,8 @@ export async function planTip(senderId: string, input: TipInput): Promise<TipPla
     const to = getAddress(recipient.walletAddress);
     return {
       kind: "direct",
+      platform: input.platform,
+      username: normalizeHandle(input.toUsername),
       recipientId: recipient.userId,
       recipientWallet: to,
       units,

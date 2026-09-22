@@ -11,6 +11,7 @@ import { Wordmark } from "@/components/ui/misc";
 import { LiquidBar, useHoverLens } from "@/components/ui/LiquidGlass";
 import { useAccount } from "@/components/account";
 import { springs } from "@/components/motion";
+import { useFinishUnconfirmedTips } from "@/lib/money-client";
 
 const SendContext = createContext<{ openSend: () => void }>({ openSend: () => {} });
 export const useSend = () => useContext(SendContext);
@@ -29,6 +30,7 @@ function navFor(mode: string | null): NavItem[] {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { mode } = useAccount();
+  useFinishUnconfirmedTips();
   const { user } = usePrivy();
   const [sendOpen, setSendOpen] = useState(false);
   const openSend = useCallback(() => setSendOpen(true), []);

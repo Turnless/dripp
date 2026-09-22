@@ -44,21 +44,23 @@ app/                          Next.js App Router
   overlay/[username]/         OBS browser-source page
   api/
     me/                       POST sign-up/sync, PATCH viewer/creator mode
-    tip/prepare/              POST -- calls for the user's smart wallet to send
-    tip/confirm/              POST -- verify the tx onchain, then record the tip
+    tip/prepare/              POST -- save a tip intent, return the calls for the smart wallet to send
+    tip/confirm/              POST -- verify the tx onchain against the intent, then record the tip
     withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (UI waits on Mercuryo)
     balance/                  GET -- balance in cents
     activity/                 GET -- history (tips, escrow, withdrawals)
     username/resolve/         GET -- check if a username exists/is verifiable
     platform/link/[provider]  POST (Privy token) -- returns the OAuth URL to link YouTube/Kick
     platform/callback/[provider]  GET -- finish OAuth, release pending tips
-    overlay/events/[username] GET (SSE) -- live tip alerts for the overlay
+    overlay/events/[username] GET (SSE) -- live tip alerts for the overlay (?platform=youtube|kick)
+    cron/reconcile/           GET (CRON_SECRET) -- record tips confirm missed, finish escrow claims
 
 lib/
   chain.ts                    Monad chain definition + USDC constants
   supabase.ts                 Browser + server Supabase clients
-  wallet-server.ts            Server chain helpers: balance, verify transfers, release escrow
-  tip-plan.ts                 Where a tip goes + the exact calls (shared by prepare/confirm)
+  wallet-server.ts            Server chain helpers: balance, verify transfers, escrow claims, log scans
+  escrow-claims.ts            Send TipVault.claim and mark exactly the tips it released
+  tip-plan.ts                 Where a tip goes + the exact calls (saved as a tip intent by prepare)
   withdraw-plan.ts            Withdrawal calls: 1% fee to treasury + payout, batched
   tipvault.ts                 TipVault ABI + handle hash
   money-client.ts             Browser: useSendTip, useBalance, useActivity
@@ -73,6 +75,8 @@ contracts/
 
 supabase/
   schema.sql                  Full database schema (matches the ER diagram)
+  migrate.sql                 Brings an existing database up to date with schema.sql
+  functions.sql               Functions the API uses to record money movements
 ```
 
 ## Why there's no NextAuth
@@ -105,7 +109,8 @@ though it was written carefully and reviewed by hand.
 1. `cp .env.example .env.local` and fill in every value -- see the
    "needs verification" section above for the ones to double-check first.
 2. `npm install`
-3. Run `supabase/schema.sql` against your Supabase project.
+3. Run `supabase/schema.sql` against your Supabase project (an existing
+   project runs `supabase/migrate.sql` instead), then `supabase/functions.sql`.
 4. `cd contracts && forge install openzeppelin/openzeppelin-contracts forge-std`
    then `forge test` to confirm `TipVault.sol` passes its test suite.
 5. Deploy `TipVault` with `forge script script/Deploy.s.sol` (see the
@@ -129,14 +134,24 @@ by a paymaster. Nothing moves until these are configured:
    (the owner address needs a little MON -- it pays gas for escrow claims),
    and `TREASURY_ADDRESS` (receives the 1% withdrawal fee).
 4. Existing users: sign out and back in so `/api/me` stores the **smart
-   wallet** address (funds live there, not in the embedded signer).
+   wallet** address (funds live there, not in the embedded signer). Sign-in
+   waits for the smart wallet; it never stores the embedded wallet instead.
+5. Schedule the reconcile job: call `GET /api/cron/reconcile` with
+   `Authorization: Bearer $CRON_SECRET` every minute or so (Vercel Cron sends
+   exactly that header; any external scheduler works too). Set `CRON_SECRET`
+   to at least 16 random characters -- the job refuses to run without it.
 
-How a tip moves: `/api/tip/prepare` returns the calls -> the smart wallet
-sends them as one sponsored operation (no popups: `showWalletUIs: false`) ->
-`/api/tip/confirm` checks the transaction's logs onchain before recording
-anything. Tips to people who haven't joined are `approve` + `depositPending`
-into TipVault in one operation; linking the channel later triggers
-`TipVault.claim` from the backend and marks the rows collected.
+How a tip moves: `/api/tip/prepare` works out the recipient, saves it as a
+tip intent and returns the calls -> the smart wallet sends them as one
+sponsored operation (no popups: `showWalletUIs: false`) -> `/api/tip/confirm`
+checks the transaction's logs onchain against the saved intent before
+recording anything. Each onchain log can back only one record, in any table
+(`chain_logs`). Once the money has moved the app never offers to send again:
+if confirming fails it keeps retrying (and on the next app load), and the
+reconcile job records anything still missing from the chain. Tips to people
+who haven't joined are `approve` + `depositPending` into TipVault in one
+operation; linking the channel later sends `TipVault.claim` from the backend,
+and the tips that claim released are marked collected from its receipt.
 
 ## Deliberately left as TODOs, not built
 
