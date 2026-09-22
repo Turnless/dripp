@@ -40,7 +40,14 @@ export async function getAuthenticatedPrivyId(req: Request): Promise<string | nu
   try {
     const { user_id } = await privy().utils().auth().verifyAccessToken(token);
     return user_id;
-  } catch {
+  } catch (err) {
+    // Logged (not returned) so a 401 can be diagnosed from the server logs
+    // without telling the caller anything useful.
+    console.error("Privy token verification failed:", err instanceof Error ? err.message : err, {
+      hasAppId: Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID),
+      hasAppSecret: Boolean(process.env.PRIVY_APP_SECRET),
+      hasVerificationKey: Boolean(process.env.PRIVY_JWT_VERIFICATION_KEY),
+    });
     return null;
   }
 }
