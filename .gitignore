@@ -21,3 +21,8 @@ contracts/broadcast/*/31337/
 # OS / editor
 .DS_Store
 Thumbs.db
+docs/
+CLAUDE.md
+design.md
+.claude/
+contracts/broadcast/
