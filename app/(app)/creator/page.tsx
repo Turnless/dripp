@@ -34,7 +34,7 @@ export default function CreatorPage() {
   }, []);
 
   const youtube = links.find((l) => l.platform === "youtube");
-  const overlayUrl = youtube ? `${origin}/overlay/${youtube.platform_username}` : null;
+  const overlayUrl = youtube ? `${origin}/overlay/${youtube.platform_username}?platform=youtube` : null;
 
   async function linkYoutube() {
     setLinking(true);

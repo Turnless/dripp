@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { LINK_NONCE_COOKIE, verifyState } from "@/lib/oauth";
 import { supabaseServer } from "@/lib/supabase";
 import { normalizeHandle } from "@/lib/username-resolve";
-import { getAddress } from "viem";
 import { unitsToCents } from "@/lib/chain";
-import { handleHash, tipVaultAddress } from "@/lib/tipvault";
-import { releaseEscrow } from "@/lib/wallet-server";
+import { tipVaultAddress } from "@/lib/tipvault";
+import { claimEscrowFor } from "@/lib/escrow-claims";
 
 /**
  * Step 2 of platform linking: exchange the OAuth code for a token, fetch the
@@ -105,8 +104,9 @@ export async function GET(
   }
 
   // Release any tips held in escrow for this handle, now that OAuth proved
-  // this user owns it. The onchain balance is the source of truth; rows are
-  // marked claimed (never deleted) only after the claim transaction succeeds.
+  // this user owns it. The onchain claim is the source of truth: rows are
+  // marked collected (never deleted) from the claim's receipt, and only the
+  // deposits that claim actually released -- see lib/escrow-claims.ts.
   let collectedCents = 0;
   const { data: user } = await db
     .from("users")
@@ -115,26 +115,12 @@ export async function GET(
     .single();
   if (user?.wallet_address && tipVaultAddress()) {
     try {
-      const released = await releaseEscrow(
-        handleHash(params.provider, platformUsername),
-        getAddress(user.wallet_address)
-      );
-      if (released) {
-        collectedCents = unitsToCents(released.units);
-        await db
-          .from("pending_tips")
-          .update({
-            claimed_by: verified.userId,
-            claim_tx_hash: released.txHash,
-            claimed_at: new Date().toISOString(),
-          })
-          .eq("platform", params.provider)
-          .eq("platform_username", platformUsername)
-          .is("claimed_at", null);
-      }
+      const units = await claimEscrowFor(params.provider, platformUsername, verified.userId, user.wallet_address);
+      collectedCents = unitsToCents(units);
     } catch (err) {
-      // Linking still succeeded; the tips stay safely in escrow and can be
-      // released on the next link attempt.
+      // Linking still succeeded. Tips not yet claimed stay safely in escrow
+      // and a claim already sent is finished by the next link attempt or the
+      // reconcile job.
       console.error("escrow release failed", err);
     }
   }

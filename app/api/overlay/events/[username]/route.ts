@@ -20,9 +20,18 @@ export async function GET(
   const encoder = new TextEncoder();
   const db = supabaseServer();
 
+  // The same handle can be linked on YouTube and on Kick by different
+  // people, so the platform is part of the lookup. Overlay links without it
+  // predate Kick support and are YouTube links.
+  const platform = req.nextUrl.searchParams.get("platform") ?? "youtube";
+  if (platform !== "youtube" && platform !== "kick") {
+    return new Response("Unknown platform", { status: 400 });
+  }
+
   const { data: user } = await db
     .from("platform_links")
     .select("user_id")
+    .eq("platform", platform)
     .eq("platform_username", normalizeHandle(params.username))
     .maybeSingle();
 

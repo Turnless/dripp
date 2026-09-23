@@ -1,6 +1,7 @@
 -- Brings an existing dripp database up to date with supabase/schema.sql.
 -- Safe to run more than once: every step is skipped if already applied.
 -- (A brand-new project can just run schema.sql instead.)
+-- Run supabase/functions.sql after this.
 
 -- 1. users: Privy ID + viewer/creator mode -------------------------------
 alter table users add column if not exists privy_id text;
@@ -27,13 +28,12 @@ exception when duplicate_object then null; end $$;
 
 -- 3. pending_tips: who sent it, the deposit, and whether it was collected -
 alter table pending_tips add column if not exists sender_id uuid references users(id);
+alter table pending_tips add column if not exists sender_wallet text;
 alter table pending_tips add column if not exists deposit_tx_hash text;
 alter table pending_tips add column if not exists claimed_by uuid references users(id);
 alter table pending_tips add column if not exists claim_tx_hash text;
 alter table pending_tips add column if not exists claimed_at timestamptz;
 
-create unique index if not exists pending_tips_deposit_tx_hash_key
-  on pending_tips (deposit_tx_hash);
 create index if not exists idx_pending_tips_sender on pending_tips (sender_id);
 
 -- 4. withdrawals (amount + the 1% fee) -----------------------------------
@@ -42,10 +42,81 @@ create table if not exists withdrawals (
   user_id uuid not null references users(id),
   amount numeric(12, 2) not null check (amount > 0),
   fee numeric(12, 2) not null check (fee >= 0),
-  tx_hash text not null unique,
+  tx_hash text not null,
   created_at timestamptz not null default now()
 );
 create index if not exists idx_withdrawals_user on withdrawals (user_id);
+
+-- 4b. records are keyed by (transaction, log), not transaction alone ------
+alter table tips add column if not exists log_index integer;
+alter table tips drop constraint if exists tips_tx_hash_key;
+drop index if exists tips_tx_hash_key;
+create unique index if not exists tips_tx_hash_log_index_key on tips (tx_hash, log_index);
+
+alter table pending_tips add column if not exists deposit_log_index integer;
+alter table pending_tips add column if not exists deposit_block bigint;
+alter table pending_tips drop constraint if exists pending_tips_deposit_tx_hash_key;
+drop index if exists pending_tips_deposit_tx_hash_key;
+create unique index if not exists pending_tips_deposit_tx_hash_deposit_log_index_key
+  on pending_tips (deposit_tx_hash, deposit_log_index);
+
+alter table withdrawals add column if not exists fee_log_index integer;
+alter table withdrawals add column if not exists payout_log_index integer;
+alter table withdrawals drop constraint if exists withdrawals_tx_hash_key;
+drop index if exists withdrawals_tx_hash_key;
+create unique index if not exists withdrawals_tx_hash_payout_log_index_key
+  on withdrawals (tx_hash, payout_log_index);
+
+-- 4c. tip intents, the log ledger, escrow claims, job progress ------------
+create table if not exists tip_intents (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid not null references users(id),
+  sender_wallet text not null,
+  kind text not null check (kind in ('direct', 'escrow')),
+  platform text not null check (platform in ('youtube', 'kick')),
+  platform_username text not null check (platform_username = lower(platform_username)),
+  recipient_id uuid references users(id),
+  recipient_wallet text,
+  handle_hash text,
+  amount numeric(12, 2) not null check (amount > 0),
+  tx_hash text,
+  log_index integer,
+  confirmed_at timestamptz,
+  created_at timestamptz not null default now(),
+  check (
+    (kind = 'direct' and recipient_id is not null and recipient_wallet is not null)
+    or (kind = 'escrow' and handle_hash is not null)
+  )
+);
+create index if not exists idx_tip_intents_sender on tip_intents (sender_id);
+create index if not exists idx_tip_intents_open on tip_intents (created_at) where confirmed_at is null;
+
+create table if not exists chain_logs (
+  tx_hash text not null,
+  log_index integer not null,
+  kind text not null check (kind in ('tip', 'escrow_deposit', 'withdrawal_fee', 'withdrawal_payout')),
+  created_at timestamptz not null default now(),
+  primary key (tx_hash, log_index)
+);
+
+create table if not exists escrow_claims (
+  tx_hash text primary key,
+  platform text not null check (platform in ('youtube', 'kick')),
+  platform_username text not null check (platform_username = lower(platform_username)),
+  claimed_by uuid not null references users(id),
+  succeeded boolean,
+  claim_block bigint,
+  claim_log_index integer,
+  applied_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_escrow_claims_handle on escrow_claims (platform, platform_username);
+
+create table if not exists sync_state (
+  key text primary key,
+  block bigint not null,
+  updated_at timestamptz not null default now()
+);
 
 -- 5. live tip alerts for the overlay -------------------------------------
 do $$ begin
@@ -59,7 +130,20 @@ alter table pending_tips enable row level security;
 alter table tips enable row level security;
 alter table withdrawals enable row level security;
 alter table bot_scores enable row level security;
+alter table tip_intents enable row level security;
+alter table chain_logs enable row level security;
+alter table escrow_claims enable row level security;
+alter table sync_state enable row level security;
 
--- Note: privy_id and pending_tips.sender_id / deposit_tx_hash are NOT NULL in
--- schema.sql but stay nullable here, because rows created before this
--- migration have no value for them. New rows always set them.
+-- Note: some columns are NOT NULL in schema.sql but stay nullable here,
+-- because rows created before this migration have no value for them. New
+-- rows always set them. What the app does with those older rows:
+--   * users.privy_id: /api/me finds the row by google_id on the user's next
+--     sign-in and fills privy_id in (it can't be backfilled from SQL).
+--   * tips.log_index, pending_tips.deposit_log_index / deposit_block,
+--     withdrawals.payout_log_index: older rows keep NULL. A transaction that
+--     already has one of these rows is never recorded again (see
+--     functions.sql).
+--   * pending_tips.sender_id / sender_wallet / deposit_tx_hash: rows without
+--     a deposit_tx_hash were never verified onchain, so a claim never marks
+--     them collected.

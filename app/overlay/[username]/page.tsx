@@ -20,13 +20,22 @@ interface TipAlert {
  * Styling is fixed (not theme-dependent) so it stays readable over any game
  * footage -- design.md section 9, screen 7.
  */
-export default function OverlayPage({ params }: { params: { username: string } }) {
+export default function OverlayPage({
+  params,
+  searchParams,
+}: {
+  params: { username: string };
+  searchParams: { platform?: string };
+}) {
+  const platform = searchParams.platform === "kick" ? "kick" : "youtube";
   const [alert, setAlert] = useState<TipAlert | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
   const reduce = useReducedMotion();
 
   useEffect(() => {
-    const source = new EventSource(`/api/overlay/events/${encodeURIComponent(params.username)}`);
+    const source = new EventSource(
+      `/api/overlay/events/${encodeURIComponent(params.username)}?platform=${platform}`
+    );
 
     source.onmessage = (event) => {
       const tip = JSON.parse(event.data);
@@ -39,7 +48,7 @@ export default function OverlayPage({ params }: { params: { username: string } }
       source.close();
       clearTimeout(hideTimer.current);
     };
-  }, [params.username]);
+  }, [params.username, platform]);
 
   return (
     <div className="flex h-screen w-screen items-end justify-center pb-16">

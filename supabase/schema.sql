@@ -1,7 +1,8 @@
 -- Matches the ER diagram in 04-architecture.md, section 6.
 -- Run this in the Supabase SQL editor (or via `supabase db push`) before
--- wiring up the app. RLS is enabled on every table with no policies (deny
--- all for the anon key) -- see the bottom of this file.
+-- wiring up the app, then run supabase/functions.sql. RLS is enabled on
+-- every table with no policies (deny all for the anon key) -- see the bottom
+-- of this file.
 
 create extension if not exists "pgcrypto";
 
@@ -46,11 +47,16 @@ create table pending_tips (
   amount numeric(12, 2) not null check (amount > 0),
   sender_id uuid not null references users(id),
   sender_wallet text not null,
-  deposit_tx_hash text not null unique,
+  deposit_tx_hash text not null,
+  -- Position of the PendingTipDeposited log, so a claim can tell which
+  -- deposits it released (see apply_escrow_claim in functions.sql).
+  deposit_log_index integer not null,
+  deposit_block bigint not null,
   claimed_by uuid references users(id),
   claim_tx_hash text,
   claimed_at timestamptz,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique (deposit_tx_hash, deposit_log_index)
 );
 
 create index idx_pending_tips_sender on pending_tips (sender_id);
@@ -63,8 +69,12 @@ create table tips (
   sender_id uuid not null references users(id),
   recipient_id uuid not null references users(id),
   amount numeric(12, 2) not null check (amount > 0),
-  tx_hash text not null unique,
-  created_at timestamptz not null default now()
+  tx_hash text not null,
+  -- One transaction can carry several transfers (e.g. several people's
+  -- operations bundled together), so a tip is identified by its log.
+  log_index integer not null,
+  created_at timestamptz not null default now(),
+  unique (tx_hash, log_index)
 );
 
 create index idx_tips_recipient on tips (recipient_id);
@@ -77,11 +87,78 @@ create table withdrawals (
   user_id uuid not null references users(id),
   amount numeric(12, 2) not null check (amount > 0),
   fee numeric(12, 2) not null check (fee >= 0),
-  tx_hash text not null unique,
-  created_at timestamptz not null default now()
+  tx_hash text not null,
+  fee_log_index integer,
+  payout_log_index integer not null,
+  created_at timestamptz not null default now(),
+  unique (tx_hash, payout_log_index)
 );
 
 create index idx_withdrawals_user on withdrawals (user_id);
+
+-- A tip the server has worked out (recipient + amount) and handed to the
+-- browser to send. /api/tip/confirm checks the transaction against THIS row
+-- instead of resolving the recipient again, so a creator linking their
+-- channel mid-send (or a platform lookup failing) can't lose the record.
+create table tip_intents (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid not null references users(id),
+  sender_wallet text not null,
+  kind text not null check (kind in ('direct', 'escrow')),
+  platform text not null check (platform in ('youtube', 'kick')),
+  platform_username text not null check (platform_username = lower(platform_username)),
+  recipient_id uuid references users(id),
+  recipient_wallet text,
+  handle_hash text,
+  amount numeric(12, 2) not null check (amount > 0),
+  tx_hash text,
+  log_index integer,
+  confirmed_at timestamptz,
+  created_at timestamptz not null default now(),
+  check (
+    (kind = 'direct' and recipient_id is not null and recipient_wallet is not null)
+    or (kind = 'escrow' and handle_hash is not null)
+  )
+);
+
+create index idx_tip_intents_sender on tip_intents (sender_id);
+create index idx_tip_intents_open on tip_intents (created_at) where confirmed_at is null;
+
+-- Every onchain log that backs a row in tips, pending_tips or withdrawals.
+-- The primary key means one transfer can only ever be recorded once, in
+-- one table.
+create table chain_logs (
+  tx_hash text not null,
+  log_index integer not null,
+  kind text not null check (kind in ('tip', 'escrow_deposit', 'withdrawal_fee', 'withdrawal_payout')),
+  created_at timestamptz not null default now(),
+  primary key (tx_hash, log_index)
+);
+
+-- TipVault.claim transactions sent by the backend. Written as soon as the
+-- transaction is sent, so if waiting for it (or the database update after
+-- it) fails, the next link attempt or the reconcile job finishes the job.
+create table escrow_claims (
+  tx_hash text primary key,
+  platform text not null check (platform in ('youtube', 'kick')),
+  platform_username text not null check (platform_username = lower(platform_username)),
+  claimed_by uuid not null references users(id),
+  succeeded boolean,
+  claim_block bigint,
+  claim_log_index integer,
+  applied_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index idx_escrow_claims_handle on escrow_claims (platform, platform_username);
+
+-- Progress markers for background jobs (e.g. the last block the reconcile
+-- job has scanned).
+create table sync_state (
+  key text primary key,
+  block bigint not null,
+  updated_at timestamptz not null default now()
+);
 
 create table bot_scores (
   user_id uuid primary key references users(id) on delete cascade,
@@ -105,3 +182,7 @@ alter table pending_tips enable row level security;
 alter table tips enable row level security;
 alter table withdrawals enable row level security;
 alter table bot_scores enable row level security;
+alter table tip_intents enable row level security;
+alter table chain_logs enable row level security;
+alter table escrow_claims enable row level security;
+alter table sync_state enable row level security;
