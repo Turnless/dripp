@@ -219,10 +219,9 @@ export async function sendEscrowClaim(
 }
 
 /**
- * *** VERIFY BEFORE USE *** -- written against the installed @privy-io/node
- * types (wallets().ethereum().sendTransaction, authorization_context), not
- * yet exercised against a live Privy server wallet. Test one claim before
- * moving TipVault ownership to the wallet.
+ * Verified with a live claim on Monad mainnet through a Privy server wallet
+ * (installed @privy-io/node: wallets().ethereum().sendTransaction with
+ * authorization_context). Recheck against Privy's docs when upgrading it.
  */
 async function sendClaimWithPrivyWallet(
   walletId: string,
