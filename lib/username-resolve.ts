@@ -33,7 +33,7 @@ type Channel = { found: false } | { found: true; channelId: string };
  * API quota ran out), an earlier positive answer is still used, so tipping
  * keeps working.
  */
-async function platformChannel(platform: Platform, username: string): Promise<Channel> {
+export async function platformChannel(platform: Platform, username: string): Promise<Channel> {
   const db = supabaseServer();
   const { data: cached, error: cacheErr } = await db
     .from("handle_lookups")

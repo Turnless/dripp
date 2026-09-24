@@ -36,8 +36,9 @@ README covers the code. The design tokens (the "Coin" palette -- yellow
 
 Automated tests: `npm test` (money math, the onchain log checks, the confirm
 route, OAuth state, channel-ID resolution, the lookup cache, rate limiting,
-refunds, the one-time mode choice, the public-profile options and who may
-withdraw to an address) and `forge test` in `contracts/` (unit tests plus invariant tests: every handle's escrow equals
+refunds, the one-time mode choice, the public-profile options, who may
+withdraw to an address, and the bot/real rules) and `forge test` in
+`contracts/` (unit tests plus invariant tests: every handle's escrow equals
 its senders' contributions and the vault's balance, and a claimed tip can
 never also be refunded).
 
@@ -98,6 +99,9 @@ app/                          Next.js App Router
     tip/confirm/              POST -- verify the tx onchain against the intent, then record the tip
     withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (to a wallet address, testers only, until Mercuryo)
     creator/stats/            GET -- live subscriber count of the caller's linked channel
+    me/verify/start|check/    POST -- send a phone code (WhatsApp/SMS, strictly limited); check it
+    creator/tippers/          GET -- 30-day verified / not verified / suspicious breakdown of the caller's tippers
+    bot-check/                POST -- verification + swarm check for a reward drop's recipients
     balance/                  GET -- balance in cents
     activity/                 GET -- history (tips, escrow, withdrawals); ?week=1 adds the last 7 days received
     username/resolve/         GET -- check if a username exists/is verifiable
@@ -116,6 +120,10 @@ lib/
   tip-plan.ts                 Where a tip goes + the exact calls (saved as a tip intent by prepare)
   withdraw-plan.ts            Withdrawal calls: 1% fee to treasury + payout, batched
   withdraw-access.ts          Who may withdraw to a wallet address (WITHDRAW_TO_ADDRESS_EMAILS)
+  bot-check.ts                Viewer verification + bot/real rules (pure, tested)
+  viewer-verification.ts      YouTube check at link time, recording a verified phone, reading verification
+  phone-verify.ts             Twilio Verify (WhatsApp / SMS), number format, keyed phone hash
+  tipper-check.ts             Loads a creator's tipper signals and classifies them
   profile-visibility.ts       What the public profile shows (the "What people see" options)
   tipvault.ts                 TipVault ABI + handle hash
   money-client.ts             Browser: useSendTip, useWithdraw, useBalance, useActivity, unconfirmed tip/withdrawal retries
@@ -163,6 +171,51 @@ supabase/
 
 After pulling changes that touch `supabase/`, run `migrate.sql` then
 `functions.sql` again on your existing database (both are safe to re-run).
+
+## Viewer verification (phone)
+
+**Status: built, not activated yet.** Twilio will be set up later (a paid
+account is needed to send codes to anyone). Until the Twilio settings below
+are in Vercel, the app hides every phone option and tells viewers the
+other ways to get verified: create a YouTube channel if they don't have one
+(free, nothing to post) and link it, or send a tip of $1 or more. Adding the
+settings and redeploying turns the phone option on -- no code change.
+
+Viewers who don't pass the YouTube check when they link a channel can then
+verify a phone number. dripp sends the code itself through **Twilio
+Verify**, by **WhatsApp or SMS** (the viewer picks), so it works in the
+countries Twilio covers. Privy's phone login isn't used.
+
+dripp pays for every code, so the server checks everything before sending
+(`/api/me/verify/start`, `phoneVerifyLimit` in `lib/rate-limit.ts`): not
+verified yet, a real-looking international number, not already verifying
+another account, and within the limits -- 1 attempt per 5 minutes and 3 a
+day per person, 3 a day per number, 10 a day per network, and
+`PHONE_VERIFY_DAILY_CAP` (default 100) a day in total. If the limiter can't
+be reached, nothing is sent. Code guesses are limited too (and Twilio stops
+a code after 5 wrong tries).
+
+Numbers are never stored: only a keyed hash (`users.phone_hash`, unique),
+which is what stops one phone verifying two accounts. Numbers are accepted
+in international form; a local leading 0 kept after the country code
+(`+234 0816...`) is dropped automatically (not for Italy, +39).
+
+Set it up once:
+
+1. Create a Twilio account, then **Verify -> Services -> Create**. Turn on
+   the **WhatsApp** and **SMS** channels. WhatsApp codes can start on
+   Twilio's own sender; check the WhatsApp settings in the console for your
+   account.
+2. In the console, restrict **Geo permissions** to the countries you serve
+   and turn on **Fraud Guard** (SMS pumping protection), then set a usage
+   alert / spending limit under billing.
+   On a trial account, codes only reach numbers added under Phone Numbers
+   -> Verified Caller IDs; sending to anyone needs an upgraded account.
+3. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID`
+   and `PHONE_HASH_SECRET` (and optionally `PHONE_VERIFY_DAILY_CAP`) in
+   Vercel -- server-only -- and redeploy.
+4. Test: Profile -> "One more step" -> **Verify phone** -> WhatsApp -> enter
+   the code. The card should switch to **Verified**.
 
 ## Gas-free transfers setup
 
@@ -292,8 +345,10 @@ NextAuth on top (see the comment at the top of `lib/oauth.ts`).
 - In-app usernames: only YouTube/Kick handles can be tipped, so someone who
   hasn't linked a channel can't receive tips yet (anyone can link one --
   viewers on Profile, creators on the Creator page)
-- The bot/real breakdown dashboard and the bot filter for reward drops
-  (`bot_scores` table exists, nothing populates it yet)
+- More bot signals: funding-source clustering (needs an onchain indexer) and
+  "chatted in a dripp creator's live stream" (needs the streamer's live-chat
+  permission). Verification and the swarm check are built
+  (`lib/bot-check.ts`); `bot_scores` is unused.
 - Row Level Security *policies* in Supabase -- RLS itself is enabled on
   every table and the browser never talks to Supabase directly (only the
   server, with the service-role key); add narrow policies only if that

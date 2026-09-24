@@ -404,6 +404,63 @@ as $$
       + (select count(*) from pending_tips where sender_id = p_user_id and refunded_at is null);
 $$;
 
+-- How each user is verified as a person (lib/viewer-verification.ts): their
+-- stored proof (youtube / phone / topup), else 'tipped' if they've tipped at
+-- least $1.00 of their own money (tips not returned to them), else null.
+-- Keep the $1.00 in step with MIN_TIPPED_CENTS in lib/bot-check.ts.
+create or replace function viewer_verifications(p_users uuid[])
+returns table (user_id uuid, via text)
+language sql
+stable
+set search_path = public
+as $$
+  select
+    u.id,
+    coalesce(
+      u.human_verified_via,
+      case when
+        coalesce((select sum(t.amount) from tips t where t.sender_id = u.id), 0)
+        + coalesce((select sum(p.amount) from pending_tips p where p.sender_id = u.id and p.refunded_at is null), 0)
+        >= 1.00
+      then 'tipped' end
+    )
+  from users u
+  where u.id = any(p_users);
+$$;
+
+-- Signals for the bot/real breakdown (lib/bot-check.ts classifies them):
+-- one row per person who tipped p_creator since p_since (direct tips +
+-- escrowed tips the creator collected), with their account age, when they
+-- first tipped this creator, and how they're verified (viewer_verifications).
+-- Its columns changed, so drop the old version first.
+drop function if exists tipper_signals(uuid, timestamptz);
+create or replace function tipper_signals(p_creator uuid, p_since timestamptz)
+returns table (
+  sender_id uuid,
+  account_created_at timestamptz,
+  first_tip_at timestamptz,
+  verified_via text
+)
+language sql
+stable
+set search_path = public
+as $$
+  with incoming as (
+    select t.sender_id, t.created_at as at from tips t
+      where t.recipient_id = p_creator and t.created_at >= p_since
+    union all
+    select p.sender_id, p.created_at from pending_tips p
+      where p.claimed_by = p_creator and p.created_at >= p_since
+  ),
+  senders as (
+    select i.sender_id, min(i.at) as first_tip_at from incoming i group by i.sender_id
+  )
+  select s.sender_id, u.created_at, s.first_tip_at, v.via
+  from senders s
+  join users u on u.id = s.sender_id
+  left join viewer_verifications(array(select sender_id from senders)) v on v.user_id = s.sender_id;
+$$;
+
 -- Only the server (service-role key) may call these. Supabase grants new
 -- functions to anon/authenticated by default, and the anon key is public.
 revoke execute on function tx_has_legacy_record(text) from public, anon, authenticated;
@@ -414,6 +471,8 @@ revoke execute on function hit_rate_limit(text[], integer[], integer) from publi
 revoke execute on function record_refund(uuid, text, integer, bigint, text, text, text) from public, anon, authenticated;
 revoke execute on function link_platform_account(uuid, text, text, text, text) from public, anon, authenticated;
 revoke execute on function profile_totals(uuid) from public, anon, authenticated;
+revoke execute on function tipper_signals(uuid, timestamptz) from public, anon, authenticated;
+revoke execute on function viewer_verifications(uuid[]) from public, anon, authenticated;
 grant execute on function tx_has_legacy_record(text) to service_role;
 grant execute on function record_tip(uuid, uuid, text, integer[], bigint) to service_role;
 grant execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) to service_role;
@@ -422,3 +481,5 @@ grant execute on function hit_rate_limit(text[], integer[], integer) to service_
 grant execute on function record_refund(uuid, text, integer, bigint, text, text, text) to service_role;
 grant execute on function link_platform_account(uuid, text, text, text, text) to service_role;
 grant execute on function profile_totals(uuid) to service_role;
+grant execute on function tipper_signals(uuid, timestamptz) to service_role;
+grant execute on function viewer_verifications(uuid[]) to service_role;

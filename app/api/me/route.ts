@@ -4,6 +4,8 @@ import { getAuthenticatedPrivyId, getAuthenticatedUser, privy } from "@/lib/priv
 import { supabaseServer } from "@/lib/supabase";
 import { mayWithdrawToAddress } from "@/lib/withdraw-access";
 import { VisibilityPatchSchema, visibilityColumns, visibilityFromRow } from "@/lib/profile-visibility";
+import { verificationFor, type Verification } from "@/lib/viewer-verification";
+import { phoneVerifyConfigured } from "@/lib/phone-verify";
 import type { LinkedAccount } from "@privy-io/node";
 
 type LinkedAccountGoogleOAuth = Extract<LinkedAccount, { type: "google_oauth" }>;
@@ -83,6 +85,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Could not set up your account" }, { status: 500 });
   }
 
+  let verification: Verification = { verified: false, via: null };
+  try {
+    verification = await verificationFor(user.id);
+  } catch (err) {
+    // Sign-in must not fail on this (e.g. before the migration has run).
+    console.error("viewer verification read failed", err);
+  }
+
   const { data: links } = await db
     .from("platform_links")
     .select("platform, platform_username, avatar_url, channel_id")
@@ -95,6 +105,9 @@ export async function POST(req: NextRequest) {
     links: (links ?? []).map(({ channel_id, ...l }) => ({ ...l, needs_relink: !channel_id })),
     avatarUrl: links?.find((l) => l.avatar_url)?.avatar_url ?? null,
     profileVisibility: visibilityFromRow(user),
+    verification,
+    // Off until the Twilio settings are added; the app then hides the phone option.
+    phoneVerifyAvailable: phoneVerifyConfigured(),
     canWithdrawToAddress: mayWithdrawToAddress(google.email),
   });
 }

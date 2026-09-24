@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowLeft, BadgeCheck, CheckCircle2, Loader2, X } from "lucide-react";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
 import { springs } from "@/components/motion";
 import { useSendTip } from "@/lib/money-client";
 import { formatUsd, parseUsdToCents } from "@/lib/format";
 import { MAX_BULK_RECIPIENTS, MAX_TIP_CENTS } from "@/lib/fees";
+import { useAuthedFetch } from "@/lib/hooks";
+import type { RecipientCheck } from "@/app/api/bot-check/route";
+import { SKIP_BY_DEFAULT } from "@/lib/bot-check";
 
 type Platform = "youtube" | "kick";
 type Step = "who" | "amount" | "review" | "sending";
@@ -29,12 +32,20 @@ function parseHandles(text: string): string[] {
  *
  * Sends one gas-free tip per person, in order (prepare -> smart wallet ->
  * confirm, see lib/money-client.ts), so each result shows as it happens and
- * one bad username doesn't block the rest. Later: the bot-filter step from
- * PRD 8.5.
+ * one bad username doesn't block the rest.
+ *
+ * Before sending, the recipients are checked (PRD 7.4 / 8.5, /api/bot-check):
+ * people who aren't verified viewers, or look like part of a bot swarm, are
+ * skipped by default with the reason shown, and the creator can include any
+ * of them. People not on dripp yet are included; their tip waits for them.
  */
 export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const sendTip = useSendTip();
+  const authedFetch = useAuthedFetch();
   const reduce = useReducedMotion();
+  const [checks, setChecks] = useState<{ key: string; results: Map<string, RecipientCheck> } | null>(null);
+  const [checkFailed, setCheckFailed] = useState(false);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<Step>("who");
   const [platform, setPlatform] = useState<Platform>("youtube");
   const [draft, setDraft] = useState("");
@@ -52,7 +63,61 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
     setAmountText("");
     setResults([]);
     setDone(false);
+    setChecks(null);
+    setCheckFailed(false);
+    setSkipped(new Set());
   }, [open]);
+
+  // Check the recipients once per list, when the review step opens.
+  const checkKey = `${platform}:${handles.join(",")}`;
+  useEffect(() => {
+    if (step !== "review" || !handles.length || checks?.key === checkKey) return;
+    let cancelled = false;
+    setCheckFailed(false);
+    // Never hold the send button hostage: give up on the check after 10s.
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 10_000);
+    (async () => {
+      try {
+        const res = await authedFetch("/api/bot-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platform, handles }),
+          signal: abort.signal,
+        });
+        if (!res.ok) throw new Error();
+        const { results: list } = (await res.json()) as { results: RecipientCheck[] };
+        if (cancelled) return;
+        const map = new Map(list.map((r) => [r.handle, r]));
+        setChecks({ key: checkKey, results: map });
+        setSkipped(new Set(list.filter((r) => SKIP_BY_DEFAULT.includes(r.verdict)).map((r) => r.handle)));
+      } catch {
+        if (!cancelled) setCheckFailed(true);
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      abort.abort();
+    };
+  }, [step, checkKey, checks?.key, handles, platform, authedFetch]);
+
+  const checking = step === "review" && checks?.key !== checkKey && !checkFailed;
+  const included = handles.filter((h) => !skipped.has(h));
+  const checked = checks?.key === checkKey ? checks.results : null;
+  const countOf = (v: RecipientCheck["verdict"]) => handles.filter((h) => checked?.get(h)?.verdict === v).length;
+  const suspiciousCount = countOf("suspicious");
+  const unverifiedCount = countOf("unverified");
+  const flaggedCount = suspiciousCount + unverifiedCount;
+  const toggleSkip = (h: string) =>
+    setSkipped((cur) => {
+      const next = new Set(cur);
+      if (next.has(h)) next.delete(h);
+      else next.add(h);
+      return next;
+    });
 
   function addFromDraft() {
     const next = Array.from(new Set([...handles, ...parseHandles(draft)])).slice(0, MAX_BULK_RECIPIENTS);
@@ -75,17 +140,18 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
   const sentCount = useMemo(() => results.filter((r) => r.status === "sent" || r.status === "held").length, [results]);
 
   async function sendAll() {
+    const to = included;
     setStep("sending");
-    const initial: Result[] = handles.map((h) => ({ handle: h, status: "waiting" }));
+    const initial: Result[] = to.map((h) => ({ handle: h, status: "waiting" }));
     setResults(initial);
-    for (let i = 0; i < handles.length; i++) {
+    for (let i = 0; i < to.length; i++) {
       setResults((rs) => rs.map((r, j) => (j === i ? { ...r, status: "sending" } : r)));
       let next: Result;
       try {
-        const status = await sendTip({ platform, toUsername: handles[i], amountUsd: each / 100 });
-        next = { handle: handles[i], status: status === "pending" ? "held" : "sent" };
+        const status = await sendTip({ platform, toUsername: to[i], amountUsd: each / 100 });
+        next = { handle: to[i], status: status === "pending" ? "held" : "sent" };
       } catch (e) {
-        next = { handle: handles[i], status: "failed", error: e instanceof Error ? e.message : "Connection problem" };
+        next = { handle: to[i], status: "failed", error: e instanceof Error ? e.message : "Connection problem" };
       }
       setResults((rs) => rs.map((r, j) => (j === i ? next : r)));
     }
@@ -248,17 +314,90 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
             <>
               <div className="text-center">
                 <p className="text-muted">
-                  {formatUsd(each)} each to {n} {n === 1 ? "person" : "people"}
+                  {formatUsd(each)} each to {included.length} {included.length === 1 ? "person" : "people"}
                 </p>
-                <p className="num mt-2 text-money">{formatUsd(total)}</p>
+                <p className="num mt-2 text-money">{formatUsd(each * included.length)}</p>
               </div>
-              <ul className="max-h-56 overflow-y-auto rounded-card border border-text/10">
-                {handles.map((h) => (
-                  <li key={h} className="flex items-center justify-between border-b border-text/5 px-4 py-3 last:border-0">
-                    <span>@{h}</span>
-                    <span className="num text-muted">{formatUsd(each)}</span>
-                  </li>
-                ))}
+
+              <p
+                className={`flex items-start gap-2 text-caption ${flaggedCount ? "text-text" : "text-muted"}`}
+                role="status"
+              >
+                {checking ? (
+                  <>
+                    <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden /> Checking for likely
+                    bots...
+                  </>
+                ) : checkFailed ? (
+                  <>
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden /> We couldn&apos;t check
+                    for bots right now. You can still send.
+                  </>
+                ) : flaggedCount ? (
+                  <>
+                    <AlertTriangle
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${suspiciousCount ? "text-negative" : "text-muted"}`}
+                      aria-hidden
+                    />
+                    {[
+                      unverifiedCount ? `${unverifiedCount} not verified` : null,
+                      suspiciousCount ? `${suspiciousCount} ${suspiciousCount === 1 ? "looks" : "look"} suspicious` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                    , so they&apos;re skipped. Tap Include to send anyway.
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" aria-hidden /> Everyone here is
+                    verified or not on dripp yet.
+                  </>
+                )}
+              </p>
+
+              <ul className="max-h-64 overflow-y-auto rounded-card border border-text/10">
+                {handles.map((h) => {
+                  const check = checked?.get(h);
+                  const flagged = !!check && SKIP_BY_DEFAULT.includes(check.verdict);
+                  const skip = skipped.has(h);
+                  return (
+                    <li
+                      key={h}
+                      className="flex items-center justify-between gap-3 border-b border-text/5 px-4 py-3 last:border-0"
+                    >
+                      <span className="min-w-0">
+                        <span className={`block truncate ${skip ? "text-muted line-through" : ""}`}>@{h}</span>
+                        {check && check.verdict !== "unknown" && (
+                          <span
+                            className={`flex items-center gap-1 text-caption ${
+                              check.verdict === "suspicious" ? "text-negative" : "text-muted"
+                            }`}
+                          >
+                            {check.verdict === "suspicious" && (
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            )}
+                            {check.verdict === "verified" && (
+                              <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-text" aria-hidden />
+                            )}
+                            {check.verdict === "verified" ? "Verified" : check.reason}
+                          </span>
+                        )}
+                      </span>
+                      {flagged ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSkip(h)}
+                          aria-pressed={!skip}
+                          className="pressable h-8 shrink-0 rounded-full bg-text/[0.06] px-3 text-caption font-bold hover:bg-text/[0.1]"
+                        >
+                          {skip ? "Include" : "Skip"}
+                        </button>
+                      ) : (
+                        <span className="num shrink-0 text-muted">{formatUsd(each)}</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
               <p className="text-caption text-muted">
                 Tips are free. Anyone who hasn&apos;t joined dripp yet will get theirs when they sign up.
@@ -267,8 +406,8 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
                 <Button variant="secondary" size="lg" onClick={() => setStep("amount")} aria-label="Back">
                   <ArrowLeft className="h-5 w-5" aria-hidden />
                 </Button>
-                <Button size="lg" fullWidth onClick={sendAll}>
-                  Send {formatUsd(total)}
+                <Button size="lg" fullWidth disabled={checking || included.length === 0} onClick={sendAll}>
+                  Send {formatUsd(each * included.length)}
                 </Button>
               </div>
             </>
@@ -277,7 +416,9 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
           {step === "sending" && (
             <>
               <p className="text-center text-muted" role="status">
-                {done ? `Sent to ${sentCount} of ${n}.` : `Sending ${sentCount + 1} of ${n}...`}
+                {done
+                  ? `Sent to ${sentCount} of ${results.length}.`
+                  : `Sending ${sentCount + 1} of ${results.length}...`}
               </p>
               <ul className="max-h-72 overflow-y-auto rounded-card border border-text/10">
                 {results.map((r) => (

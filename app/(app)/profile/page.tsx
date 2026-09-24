@@ -6,6 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { ArrowUpRight, ChevronRight, HeartHandshake, LogOut, Radio } from "lucide-react";
 import { useAccount } from "@/components/account";
 import { ChannelCard } from "@/components/LinkChannel";
+import { VerificationCard } from "@/components/VerificationCard";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -49,12 +50,16 @@ export default function ProfilePage() {
         </GlassCard>
       </StaggerItem>
 
+      <StaggerItem>
+        <VerificationCard />
+      </StaggerItem>
+
       {/* Viewers link their channel here; creators do it on the Creator page. */}
       {!creator && (
         <StaggerItem>
           <ChannelCard
             page="profile"
-            blurb="Let people tip you by your YouTube handle, and collect any tips sent to it before you joined."
+            blurb="Let people tip you by your YouTube handle, collect any tips sent to it before you joined, and get verified. You need a YouTube channel first; creating one on YouTube is free."
           />
         </StaggerItem>
       )}

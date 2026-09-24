@@ -176,6 +176,17 @@ do $$ begin
   end if;
 end $$;
 
+-- 4c. viewer verification ------------------------------------------------
+alter table users add column if not exists human_verified_at timestamptz;
+alter table users add column if not exists human_verified_via text;
+do $$ begin
+  alter table users add constraint users_human_verified_via_check
+    check (human_verified_via in ('youtube', 'phone', 'topup'));
+exception when duplicate_object then null; end $$;
+
+alter table users add column if not exists phone_hash text;
+create unique index if not exists users_phone_hash_key on users (phone_hash);
+
 -- 5. live tip alerts for the overlay -------------------------------------
 do $$ begin
   alter publication supabase_realtime add table tips;

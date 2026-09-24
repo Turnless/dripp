@@ -11,6 +11,7 @@ import { springs } from "@/components/motion";
 import { useAuthedFetch, readError } from "@/lib/hooks";
 import { announceMoneyChanged } from "@/lib/money-client";
 import { formatUsd } from "@/lib/format";
+import { VerifyPhoneButton } from "@/components/VerificationCard";
 
 /**
  * Linking a YouTube channel -- open to everyone: creators do it on the
@@ -26,7 +27,7 @@ const LINK_ERRORS: Record<string, string> = {
   expired: "That link attempt expired. Please try again.",
   not_verified: "We couldn't verify your YouTube account. Please try again.",
   no_channel:
-    "That Google account doesn't have a YouTube channel with a handle. Pick the account that owns your channel.",
+    "That Google account doesn't have a YouTube channel yet. Create one on YouTube first (it's free, and you don't have to post anything), then link it here.",
   unavailable: "Linking that platform isn't available yet.",
   failed: "We couldn't link your channel. Please try again.",
 };
@@ -35,6 +36,8 @@ const LINK_ERRORS: Record<string, string> = {
 function useLinkOutcome(page: LinkPage) {
   const [collectedCents, setCollectedCents] = useState(0);
   const [linkError, setLinkError] = useState<string | null>(null);
+  // Set after a link: did linking this channel verify them as a viewer?
+  const [linkedVerified, setLinkedVerified] = useState<boolean | null>(null);
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const collected = Number(search.get("collected"));
@@ -42,13 +45,14 @@ function useLinkOutcome(page: LinkPage) {
       setCollectedCents(collected);
       announceMoneyChanged();
     }
+    if (search.has("verified")) setLinkedVerified(search.get("verified") === "1");
     const error = search.get("link_error");
     if (error) setLinkError(LINK_ERRORS[error] ?? LINK_ERRORS.failed);
-    if (search.has("collected") || search.has("link_error") || search.has("linked")) {
+    if (search.has("collected") || search.has("link_error") || search.has("linked") || search.has("verified")) {
       window.history.replaceState(null, "", `/${page}`);
     }
   }, [page]);
-  return { collectedCents, linkError, setLinkError };
+  return { collectedCents, linkError, setLinkError, linkedVerified };
 }
 
 /** Celebration card when linking released tips that were waiting. */
@@ -70,10 +74,35 @@ function CollectedBanner({ cents }: { cents: number }) {
   );
 }
 
+/** Starts linking YouTube: asks for Google's consent URL and goes there. */
+export function useLinkYoutube(page: LinkPage, onError: (message: string | null) => void) {
+  const authedFetch = useAuthedFetch();
+  const [linking, setLinking] = useState(false);
+  async function linkYoutube() {
+    setLinking(true);
+    onError(null);
+    try {
+      const res = await authedFetch(`/api/platform/link/youtube?from=${page}`, { method: "POST" });
+      if (!res.ok) {
+        onError(await readError(res));
+        return setLinking(false);
+      }
+      const { url } = await res.json();
+      window.location.assign(url);
+    } catch {
+      onError("We couldn't reach dripp. Check your connection and try again.");
+      setLinking(false);
+    }
+  }
+  return { linkYoutube, linking };
+}
+
 /**
  * The linked channel (picture, handle, verified), or the button to link one,
  * plus the result of a link that just finished.
  */
+export type { LinkPage };
+
 export function ChannelCard({
   page,
   blurb,
@@ -84,32 +113,35 @@ export function ChannelCard({
   /** Shown under a linked channel (e.g. the creator's week). */
   footer?: React.ReactNode;
 }) {
-  const { links } = useAccount();
-  const authedFetch = useAuthedFetch();
-  const [linking, setLinking] = useState(false);
-  const { collectedCents, linkError, setLinkError } = useLinkOutcome(page);
+  const { links, verification, phoneVerifyAvailable } = useAccount();
+  const { collectedCents, linkError, setLinkError, linkedVerified } = useLinkOutcome(page);
+  const { linkYoutube, linking } = useLinkYoutube(page, setLinkError);
   const youtube = links.find((l) => l.platform === "youtube");
-
-  async function linkYoutube() {
-    setLinking(true);
-    setLinkError(null);
-    try {
-      const res = await authedFetch(`/api/platform/link/youtube?from=${page}`, { method: "POST" });
-      if (!res.ok) {
-        setLinkError(await readError(res));
-        return setLinking(false);
-      }
-      const { url } = await res.json();
-      window.location.assign(url);
-    } catch {
-      setLinkError("We couldn't reach dripp. Check your connection and try again.");
-      setLinking(false);
-    }
-  }
 
   return (
     <div className="flex flex-col gap-6">
       {collectedCents > 0 && <CollectedBanner cents={collectedCents} />}
+      {linkedVerified !== null && (
+        <GlassCard className="flex flex-col gap-3 p-5" role="status">
+          {linkedVerified || verification.verified ? (
+            <p className="flex items-center gap-2 font-bold">
+              <BadgeCheck className="h-5 w-5 shrink-0" aria-hidden /> Channel linked. You&apos;re verified.
+            </p>
+          ) : (
+            <>
+              <div>
+                <p className="font-bold">Channel linked. One more step</p>
+                <p className="text-caption text-muted">
+                  {phoneVerifyAvailable
+                    ? "Verify your phone so streamers can include you when they reward their viewers."
+                    : "Your YouTube account couldn't verify you yet. Send a tip of $1 or more to get verified, or link again later as your account grows."}
+                </p>
+              </div>
+              {phoneVerifyAvailable && <VerifyPhoneButton />}
+            </>
+          )}
+        </GlassCard>
+      )}
       <GlassCard className="flex flex-col gap-4 p-6">
         {youtube ? (
           <div className="flex items-center gap-4">
