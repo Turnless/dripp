@@ -81,13 +81,14 @@ export async function POST(req: NextRequest) {
 
   const { data: links } = await db
     .from("platform_links")
-    .select("platform, platform_username, avatar_url")
+    .select("platform, platform_username, avatar_url, channel_id")
     .eq("user_id", user.id)
     .order("verified_at", { ascending: false });
 
   return NextResponse.json({
     mode: user.mode ?? null,
-    links: links ?? [],
+    // Links from before channel IDs were stored need linking again.
+    links: (links ?? []).map(({ channel_id, ...l }) => ({ ...l, needs_relink: !channel_id })),
     avatarUrl: links?.find((l) => l.avatar_url)?.avatar_url ?? null,
   });
 }

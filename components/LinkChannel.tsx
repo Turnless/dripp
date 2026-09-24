@@ -110,12 +110,28 @@ export function ChannelCard({ page, blurb }: { page: LinkPage; blurb: string }) 
                 <BadgeCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
               </span>
             </span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-title-2">@{youtube.platform_username}</p>
               <p className="text-caption text-muted">Verified YouTube channel</p>
             </div>
+            {!youtube.needs_relink && (
+              <Button variant="secondary" onClick={linkYoutube} loading={linking}>
+                Relink
+              </Button>
+            )}
           </div>
-        ) : (
+        ) : null}
+        {youtube?.needs_relink && (
+          <div className="flex flex-col gap-3">
+            <p className="text-muted">
+              Link your channel again so tips keep reaching you, even if you change your handle.
+            </p>
+            <Button onClick={linkYoutube} loading={linking}>
+              <Play className="h-5 w-5" aria-hidden /> Link YouTube again
+            </Button>
+          </div>
+        )}
+        {youtube ? null : (
           <>
             <div>
               <h2 className="text-title-2">Link your channel</h2>

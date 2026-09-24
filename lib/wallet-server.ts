@@ -192,8 +192,16 @@ export async function sendEscrowClaim(
   });
   if (pending === BigInt(0)) return null;
 
-  const privyWalletId = process.env.PRIVY_CLAIM_WALLET_ID;
-  if (privyWalletId) return sendClaimWithPrivyWallet(privyWalletId, vault, hash, recipient);
+  // Tolerate stray whitespace/quotes from pasting into the hosting env.
+  const privyWalletId = process.env.PRIVY_CLAIM_WALLET_ID?.trim().replace(/^(['"])(.*)\1$/, "$2");
+  if (privyWalletId) {
+    if (/^0x[0-9a-fA-F]{40}$/.test(privyWalletId)) {
+      throw new Error(
+        "PRIVY_CLAIM_WALLET_ID holds a wallet address; it needs the wallet's ID from the Privy dashboard (Wallets -> the wallet -> ID)"
+      );
+    }
+    return sendClaimWithPrivyWallet(privyWalletId, vault, hash, recipient);
+  }
 
   const key = process.env.TIPVAULT_OWNER_PRIVATE_KEY as `0x${string}` | undefined;
   if (!key) throw new Error("No escrow claim signer is configured");
@@ -211,10 +219,9 @@ export async function sendEscrowClaim(
 }
 
 /**
- * *** VERIFY BEFORE USE *** -- written against the installed @privy-io/node
- * types (wallets().ethereum().sendTransaction, authorization_context), not
- * yet exercised against a live Privy server wallet. Test one claim before
- * moving TipVault ownership to the wallet.
+ * Verified with a live claim on Monad mainnet through a Privy server wallet
+ * (installed @privy-io/node: wallets().ethereum().sendTransaction with
+ * authorization_context). Recheck against Privy's docs when upgrading it.
  */
 async function sendClaimWithPrivyWallet(
   walletId: string,
@@ -225,7 +232,7 @@ async function sendClaimWithPrivyWallet(
   // The wallet's authorization key, if it has an owner (recommended): the
   // private key exactly as the Privy dashboard shows it when the key is
   // created, "wallet-auth:" prefix included (the SDK strips it).
-  const authKey = process.env.PRIVY_CLAIM_AUTHORIZATION_KEY;
+  const authKey = process.env.PRIVY_CLAIM_AUTHORIZATION_KEY?.trim();
   const res = await privy()
     .wallets()
     .ethereum()

@@ -200,9 +200,9 @@ Two options, set in env vars (see `.env.example`):
      (Production only), redeploy, and link a test channel with a small
      escrowed tip to check a claim goes through. Then remove
      `TIPVAULT_OWNER_PRIVATE_KEY`.
-  The code for this path (`sendClaimWithPrivyWallet` in
-  `lib/wallet-server.ts`) is written against the installed SDK's types and
-  marked `*** VERIFY BEFORE USE ***` until that first claim succeeds.
+  This path (`sendClaimWithPrivyWallet` in `lib/wallet-server.ts`) has
+  been verified with a live claim on Monad mainnet. The claim wallet pays
+  its own gas, so keep a little MON in it.
 - **Raw private key** (`TIPVAULT_OWNER_PRIVATE_KEY`) -- used when
   `PRIVY_CLAIM_WALLET_ID` is empty. Scope it to Production only.
 
