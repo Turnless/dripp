@@ -356,6 +356,21 @@ export async function usdcTransfersFrom(
   });
 }
 
+/** USDC transfers to any of `recipients` in the block range (inclusive). */
+export async function usdcTransfersTo(
+  recipients: `0x${string}`[],
+  fromBlock: bigint,
+  toBlock: bigint
+) {
+  return publicClient.getLogs({
+    address: USDC_ADDRESS,
+    event: transferEvent,
+    args: { to: recipients },
+    fromBlock,
+    toBlock,
+  });
+}
+
 /** TipVault deposits in the block range (inclusive). */
 export async function escrowDepositsBetween(fromBlock: bigint, toBlock: bigint) {
   const vault = tipVaultAddress();

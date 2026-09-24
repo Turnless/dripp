@@ -461,6 +461,36 @@ as $$
   left join viewer_verifications(array(select sender_id from senders)) v on v.user_id = s.sender_id;
 $$;
 
+-- Records USDC someone sent to their dripp wallet from outside dripp (found
+-- by the reconcile job). Returns: recorded | log_used (that transfer already
+-- backs a tip, withdrawal or deposit).
+create or replace function record_deposit(
+  p_user_id uuid,
+  p_amount numeric,
+  p_from text,
+  p_tx_hash text,
+  p_log_index integer,
+  p_block bigint
+)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_tx text := lower(p_tx_hash);
+begin
+  insert into chain_logs (tx_hash, log_index, kind)
+    values (v_tx, p_log_index, 'deposit')
+    on conflict do nothing;
+  if not found then
+    return 'log_used';
+  end if;
+  insert into deposits (user_id, amount, from_address, tx_hash, log_index, block)
+    values (p_user_id, p_amount, lower(p_from), v_tx, p_log_index, p_block);
+  return 'recorded';
+end;
+$$;
+
 -- Sets a user's dripp username. Returns 'ok', or why not:
 --   invalid  -- not 3-20 of a-z 0-9 _ . (reserved words are checked by the app)
 --   taken    -- someone else has it
@@ -529,6 +559,7 @@ revoke execute on function profile_totals(uuid) from public, anon, authenticated
 revoke execute on function tipper_signals(uuid, timestamptz) from public, anon, authenticated;
 revoke execute on function viewer_verifications(uuid[]) from public, anon, authenticated;
 revoke execute on function set_username(uuid, text) from public, anon, authenticated;
+revoke execute on function record_deposit(uuid, numeric, text, text, integer, bigint) from public, anon, authenticated;
 grant execute on function tx_has_legacy_record(text) to service_role;
 grant execute on function record_tip(uuid, uuid, text, integer[], bigint) to service_role;
 grant execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) to service_role;
@@ -540,3 +571,4 @@ grant execute on function profile_totals(uuid) to service_role;
 grant execute on function tipper_signals(uuid, timestamptz) to service_role;
 grant execute on function viewer_verifications(uuid[]) to service_role;
 grant execute on function set_username(uuid, text) to service_role;
+grant execute on function record_deposit(uuid, numeric, text, text, integer, bigint) to service_role;

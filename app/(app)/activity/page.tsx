@@ -17,7 +17,7 @@ type Filter = (typeof FILTERS)[number];
 const matches = (f: Filter, i: ActivityItem) =>
   f === "All" ||
   (f === "Sent" && (i.direction === "sent" || i.direction === "withdrawn")) ||
-  (f === "Received" && i.direction === "received") ||
+  (f === "Received" && (i.direction === "received" || i.direction === "added")) ||
   (f === "Waiting" && i.status === "waiting");
 
 function dayLabel(iso: string) {

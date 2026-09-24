@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAddress } from "viem";
 import { z } from "zod";
 import { getAuthenticatedPrivyId, getAuthenticatedUser, privy } from "@/lib/privy-server";
 import { supabaseServer } from "@/lib/supabase";
-import { mayWithdrawToAddress } from "@/lib/withdraw-access";
 import { VisibilityPatchSchema, visibilityColumns, visibilityFromRow } from "@/lib/profile-visibility";
 import { verificationFor, type Verification } from "@/lib/viewer-verification";
 import { phoneVerifyConfigured } from "@/lib/phone-verify";
@@ -20,7 +20,8 @@ type LinkedAccountSmartWallet = Extract<LinkedAccount, { type: "smart_wallet" }>
  * Everything is read from Privy's server API for the verified user, never
  * from the request body, so a caller can't register someone else's wallet.
  *
- * Returns what the UI needs about the account -- never the wallet address.
+ * Returns what the UI needs about the account. The wallet address is only
+ * included (as the deposit address) for users who turned the crypto option on.
  * The avatar comes from a linked channel's profile picture (Privy doesn't
  * provide the Google photo); the UI shows initials when there's none.
  */
@@ -116,14 +117,21 @@ export async function POST(req: NextRequest) {
     suggestedUsername: user.username ? null : suggestUsername(google.name),
     // Off until the Twilio settings are added; the app then hides the phone option.
     phoneVerifyAvailable: phoneVerifyConfigured(),
-    canWithdrawToAddress: mayWithdrawToAddress(google.email),
+    crypto: cryptoState(user),
   });
+}
+
+/** The crypto option, and the deposit address only while it's on. */
+function cryptoState(row: { crypto_enabled?: boolean | null; wallet_address: string }) {
+  const enabled = row.crypto_enabled === true;
+  return { enabled, depositAddress: enabled ? getAddress(row.wallet_address) : null };
 }
 
 const PatchSchema = z.union([
   z.object({ mode: z.enum(["viewer", "creator"]) }),
   z.object({ profileVisibility: VisibilityPatchSchema }),
   z.object({ username: z.string().max(40) }),
+  z.object({ cryptoEnabled: z.boolean() }),
 ]);
 
 /**
@@ -131,7 +139,8 @@ const PatchSchema = z.union([
  * UI (see schema.sql), and it can't be changed afterwards: only an account
  * without a mode yet can set one.
  *
- * Also sets what the public profile page (/u/<handle>) shows.
+ * Also sets the username, what the public profile page (/u/<handle>) shows,
+ * and the crypto option.
  */
 export async function PATCH(req: NextRequest) {
   const user = await getAuthenticatedUser(req);
@@ -163,6 +172,30 @@ export async function PATCH(req: NextRequest) {
       username: check.username,
       usernameChangeableAt: new Date(Date.now() + USERNAME_CHANGE_DAYS * 86400000).toISOString(),
     });
+  }
+
+  if ("cryptoEnabled" in parsed.data) {
+    const db = supabaseServer();
+    const { data: row, error } = await db
+      .from("users")
+      .update({ crypto_enabled: parsed.data.cryptoEnabled })
+      .eq("id", user.id)
+      .select("crypto_enabled, wallet_address")
+      .single();
+    if (!error && parsed.data.cryptoEnabled) {
+      // First time on: from now on the reconcile job records deposits to them.
+      const { error: atErr } = await db
+        .from("users")
+        .update({ crypto_enabled_at: new Date().toISOString() })
+        .eq("id", user.id)
+        .is("crypto_enabled_at", null);
+      if (atErr) console.error("users crypto_enabled_at update failed", atErr);
+    }
+    if (error || !row) {
+      console.error("users crypto option update failed", error);
+      return NextResponse.json({ error: "Could not save that. Please try again." }, { status: 500 });
+    }
+    return NextResponse.json({ crypto: cryptoState(row) });
   }
 
   if ("profileVisibility" in parsed.data) {

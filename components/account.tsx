@@ -7,6 +7,9 @@ import type { ProfileVisibility } from "@/lib/profile-visibility";
 export type Verification = { verified: boolean; via: "youtube" | "phone" | "topup" | "tipped" | null };
 
 export type Mode = "viewer" | "creator";
+
+/** "I use a crypto wallet" (Profile). The deposit address is only sent while it's on. */
+export type CryptoOption = { enabled: boolean; depositAddress: string | null };
 export type PlatformLink = {
   platform: "youtube" | "kick";
   platform_username: string;
@@ -33,8 +36,12 @@ export type Account = {
   phoneVerifyAvailable: boolean;
   /** Updates it after the server confirmed a change (phone verified). */
   setVerification: (v: Verification) => void;
-  /** Tester-only stand-in for the offramp: withdraw to a wallet address. */
+  /** The crypto option: deposit address under Add money, withdraw to an address. */
+  crypto: CryptoOption;
+  /** Withdrawing to a wallet address: crypto option on AND verified. */
   canWithdrawToAddress: boolean;
+  /** Turns the crypto option on or off. */
+  setCryptoEnabled: (enabled: boolean) => Promise<void>;
   /** Only used once, at sign-up -- the mode can't change after that. */
   setMode: (mode: Mode) => Promise<void>;
   /** Saves some of the options; resolves with what the server stored. */
@@ -49,7 +56,9 @@ export const AccountContext = createContext<Account>({
   usernameChangeableAt: null,
   setUsername: async () => {},
   profileVisibility: { received: true, sent: true, tipCounts: true, subscribers: true },
+  crypto: { enabled: false, depositAddress: null },
   canWithdrawToAddress: false,
+  setCryptoEnabled: async () => {},
   verification: { verified: false, via: null },
   phoneVerifyAvailable: false,
   setVerification: () => {},

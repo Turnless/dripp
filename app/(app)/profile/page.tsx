@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
-import { ArrowUpRight, ChevronRight, HeartHandshake, LogOut, Radio } from "lucide-react";
+import { ArrowUpRight, ChevronRight, HeartHandshake, LogOut, Radio, Wallet } from "lucide-react";
 import { useAccount } from "@/components/account";
 import { ChannelCard } from "@/components/LinkChannel";
 import { VerificationCard } from "@/components/VerificationCard";
@@ -107,6 +107,10 @@ export default function ProfilePage() {
           </GlassCard>
         </StaggerItem>
       )}
+
+      <StaggerItem>
+        <CryptoOptionCard />
+      </StaggerItem>
 
       <StaggerItem>
         <GlassCard className="overflow-hidden">
@@ -294,5 +298,73 @@ function UsernameSheet({ open, onClose }: { open: boolean; onClose: () => void }
         </form>
       )}
     </Sheet>
+  );
+}
+
+/**
+ * "I use a crypto wallet": off by default. On, Add money shows the deposit
+ * address, and verified accounts can withdraw to a wallet address.
+ */
+function CryptoOptionCard() {
+  const { crypto, setCryptoEnabled, verification } = useAccount();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const on = crypto.enabled;
+
+  async function toggle() {
+    setSaving(true);
+    setError(null);
+    try {
+      await setCryptoEnabled(!on);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <GlassCard className="flex flex-col gap-3 p-5">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        disabled={saving}
+        onClick={toggle}
+        className="flex w-full items-center gap-4 text-left disabled:cursor-wait"
+      >
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-text/[0.06] text-text">
+          <Wallet className="h-5 w-5" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold">I use a crypto wallet</span>
+          <span className="block text-caption text-muted">
+            Add money from your own wallet, and withdraw to it.
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${on ? "bg-primary" : "bg-text/15"} ${
+            saving ? "opacity-60" : ""
+          }`}
+        >
+          <span
+            className={`absolute top-1 h-6 w-6 rounded-full shadow transition-all ${on ? "left-7 bg-brand" : "left-1 bg-white"}`}
+          />
+        </span>
+      </button>
+      {on && (
+        <p className="text-caption text-muted">
+          {verification.verified
+            ? "Your deposit address is under Add money. Withdraw to a wallet address from Withdraw."
+            : "Your deposit address is under Add money. To withdraw to a wallet address, get verified first (above)."}
+        </p>
+      )}
+      {error && (
+        <p className="text-caption text-negative" role="alert">
+          {error}
+        </p>
+      )}
+    </GlassCard>
   );
 }
