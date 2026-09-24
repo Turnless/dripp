@@ -18,6 +18,9 @@ create table users (
   -- a separate account type -- anyone can tip and be tipped, and Creator Mode
   -- features still require linking a platform. Null = not chosen yet.
   mode text check (mode in ('viewer', 'creator')),
+  -- Whether /u/<handle> shows this user's totals (tipped out / received).
+  -- Public by default as a transparency signal; the user can turn it off.
+  profile_public boolean not null default true,
   created_at timestamptz not null default now()
 );
 

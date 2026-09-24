@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Copy, MonitorPlay } from "lucide-react";
+import { ArrowUpRight, Check, Copy, MonitorPlay } from "lucide-react";
+import Link from "next/link";
 import { useAccount } from "@/components/account";
 import { ChannelCard } from "@/components/LinkChannel";
 import { BulkSendSheet } from "@/components/send/BulkSendSheet";
@@ -11,6 +12,35 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Stagger, StaggerItem, springs } from "@/components/motion";
 import { useRecentWithWeek } from "@/lib/money-client";
 import { formatUsd } from "@/lib/format";
+import { useAuthedFetch } from "@/lib/hooks";
+import type { CreatorStats } from "@/app/api/creator/stats/route";
+
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+
+/** Live subscriber count for the linked channel, refreshed every minute while the page is open. */
+function useSubscribers(enabled: boolean) {
+  const authedFetch = useAuthedFetch();
+  const [subscribers, setSubscribers] = useState<number | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await authedFetch("/api/creator/stats");
+        if (!res.ok) return;
+        const stats = (await res.json()) as CreatorStats;
+        if (!cancelled) setSubscribers(stats.subscribers);
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [enabled, authedFetch]);
+  return subscribers;
+}
 
 /** Creator mode. design.md section 9, screens 9, 10 and 14. */
 export default function CreatorPage() {
@@ -22,6 +52,7 @@ export default function CreatorPage() {
   useEffect(() => setOrigin(window.location.origin), []);
 
   const youtube = links.find((l) => l.platform === "youtube");
+  const subscribers = useSubscribers(!!youtube && !youtube.needs_relink);
   const overlayUrl = youtube ? `${origin}/overlay/${youtube.platform_username}?platform=youtube` : null;
 
   async function copyOverlay() {
@@ -43,9 +74,31 @@ export default function CreatorPage() {
           page="creator"
           blurb="Get a verified badge and collect any tips people sent you before you joined."
           footer={
-            <div className="grid grid-cols-2 gap-3">
-              <Stat value={week ? formatUsd(week.cents) : "—"} label="This week" />
-              <Stat value={week ? String(week.supporters) : "—"} label="Supporters this week" />
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <Stat
+                  value={subscribers === null ? "—" : compact.format(subscribers)}
+                  label="Subscribers"
+                  live={subscribers !== null}
+                />
+                <Stat value={week ? formatUsd(week.cents) : "—"} label="Tips this week" />
+                <Stat value={week ? String(week.supporters) : "—"} label="Supporters this week" />
+              </div>
+              {youtube && (
+                <Link
+                  href={`/u/${youtube.platform_username}`}
+                  target="_blank"
+                  className="pressable flex items-center justify-between gap-3 rounded-chip bg-text/[0.05] px-4 py-3 hover:bg-text/[0.08]"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-caption font-bold">Your public page</span>
+                    <span className="block truncate text-caption text-muted">
+                      {origin.replace(/^https?:\/\//, "")}/u/{youtube.platform_username}
+                    </span>
+                  </span>
+                  <ArrowUpRight className="h-5 w-5 shrink-0" aria-hidden />
+                </Link>
+              )}
             </div>
           }
         />
@@ -112,11 +165,14 @@ export default function CreatorPage() {
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({ value, label, live }: { value: string; label: string; live?: boolean }) {
   return (
-    <div className="rounded-chip bg-text/[0.05] p-3.5">
-      <p className="num text-[1.5rem] font-extrabold leading-none tracking-[-0.045em]">{value}</p>
-      <p className="mt-1.5 text-caption text-muted">{label}</p>
+    <div className="min-w-0 rounded-chip bg-text/[0.05] p-3">
+      <p className="num truncate text-[1.375rem] font-extrabold leading-none tracking-[-0.045em]">{value}</p>
+      <p className="mt-1.5 flex items-center gap-1.5 text-caption leading-tight text-muted">
+        {live && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-positive" aria-hidden />}
+        {label}
+      </p>
     </div>
   );
 }

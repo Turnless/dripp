@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthenticatedPrivyId, getAuthenticatedUser, privy } from "@/lib/privy-server";
 import { supabaseServer } from "@/lib/supabase";
+import { mayWithdrawToAddress } from "@/lib/withdraw-access";
 import type { LinkedAccount } from "@privy-io/node";
 
 type LinkedAccountGoogleOAuth = Extract<LinkedAccount, { type: "google_oauth" }>;
@@ -70,9 +71,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Could not set up your account" }, { status: 500 });
   }
 
+  // "*" rather than naming profile_public, so sign-in keeps working if the
+  // app is deployed before supabase/migrate.sql adds that column.
   const { data: user, error } = legacy
-    ? await db.from("users").update(fields).eq("id", legacy.id).select("id, mode").single()
-    : await db.from("users").upsert(fields, { onConflict: "privy_id" }).select("id, mode").single();
+    ? await db.from("users").update(fields).eq("id", legacy.id).select("*").single()
+    : await db.from("users").upsert(fields, { onConflict: "privy_id" }).select("*").single();
 
   if (error || !user) {
     console.error("users upsert failed", error);
@@ -90,15 +93,22 @@ export async function POST(req: NextRequest) {
     // Links from before channel IDs were stored need linking again.
     links: (links ?? []).map(({ channel_id, ...l }) => ({ ...l, needs_relink: !channel_id })),
     avatarUrl: links?.find((l) => l.avatar_url)?.avatar_url ?? null,
+    profilePublic: user.profile_public ?? true,
+    canWithdrawToAddress: mayWithdrawToAddress(google.email),
   });
 }
 
-const PatchSchema = z.object({ mode: z.enum(["viewer", "creator"]) });
+const PatchSchema = z.union([
+  z.object({ mode: z.enum(["viewer", "creator"]) }),
+  z.object({ profilePublic: z.boolean() }),
+]);
 
 /**
  * Saves the viewer/creator choice, made once at sign-up. It only tailors the
  * UI (see schema.sql), and it can't be changed afterwards: only an account
  * without a mode yet can set one.
+ *
+ * Also switches the public profile page (/u/<handle>) on or off.
  */
 export async function PATCH(req: NextRequest) {
   const user = await getAuthenticatedUser(req);
@@ -109,6 +119,18 @@ export async function PATCH(req: NextRequest) {
   const parsed = PatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Choose viewer or creator" }, { status: 400 });
+  }
+
+  if ("profilePublic" in parsed.data) {
+    const { error } = await supabaseServer()
+      .from("users")
+      .update({ profile_public: parsed.data.profilePublic })
+      .eq("id", user.id);
+    if (error) {
+      console.error("users profile_public update failed", error);
+      return NextResponse.json({ error: "Could not save that. Please try again." }, { status: 500 });
+    }
+    return NextResponse.json({ profilePublic: parsed.data.profilePublic });
   }
 
   const { data: updated, error } = await supabaseServer()

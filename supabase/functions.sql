@@ -384,6 +384,26 @@ begin
 end;
 $$;
 
+-- Public profile totals (/u/<handle>): everything a user has received
+-- (direct tips + escrowed tips they collected) and tipped out (direct tips +
+-- escrowed tips not returned to them), with counts.
+create or replace function profile_totals(p_user_id uuid)
+returns table (received numeric, received_count bigint, sent numeric, sent_count bigint)
+language sql
+stable
+set search_path = public
+as $$
+  select
+    coalesce((select sum(amount) from tips where recipient_id = p_user_id), 0)
+      + coalesce((select sum(amount) from pending_tips where claimed_by = p_user_id), 0),
+    (select count(*) from tips where recipient_id = p_user_id)
+      + (select count(*) from pending_tips where claimed_by = p_user_id),
+    coalesce((select sum(amount) from tips where sender_id = p_user_id), 0)
+      + coalesce((select sum(amount) from pending_tips where sender_id = p_user_id and refunded_at is null), 0),
+    (select count(*) from tips where sender_id = p_user_id)
+      + (select count(*) from pending_tips where sender_id = p_user_id and refunded_at is null);
+$$;
+
 -- Only the server (service-role key) may call these. Supabase grants new
 -- functions to anon/authenticated by default, and the anon key is public.
 revoke execute on function tx_has_legacy_record(text) from public, anon, authenticated;
@@ -393,6 +413,7 @@ revoke execute on function apply_escrow_claim(text, boolean, bigint, integer) fr
 revoke execute on function hit_rate_limit(text[], integer[], integer) from public, anon, authenticated;
 revoke execute on function record_refund(uuid, text, integer, bigint, text, text, text) from public, anon, authenticated;
 revoke execute on function link_platform_account(uuid, text, text, text, text) from public, anon, authenticated;
+revoke execute on function profile_totals(uuid) from public, anon, authenticated;
 grant execute on function tx_has_legacy_record(text) to service_role;
 grant execute on function record_tip(uuid, uuid, text, integer[], bigint) to service_role;
 grant execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) to service_role;
@@ -400,3 +421,4 @@ grant execute on function apply_escrow_claim(text, boolean, bigint, integer) to 
 grant execute on function hit_rate_limit(text[], integer[], integer) to service_role;
 grant execute on function record_refund(uuid, text, integer, bigint, text, text, text) to service_role;
 grant execute on function link_platform_account(uuid, text, text, text, text) to service_role;
+grant execute on function profile_totals(uuid) to service_role;

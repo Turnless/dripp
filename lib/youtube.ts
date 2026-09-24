@@ -43,3 +43,27 @@ export async function lookupYoutubeHandle(
       : Number(item.statistics?.subscriberCount ?? 0),
   };
 }
+
+/**
+ * A channel's current subscriber count by channel ID (the Creator page's
+ * live count). YouTube returns it rounded to 3 significant figures, and null
+ * when the channel hides it. Cached for a minute, so a channel costs at
+ * most one API call a minute however often its Creator page refreshes.
+ */
+export async function youtubeSubscriberCount(channelId: string): Promise<number | null> {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) throw new Error("YOUTUBE_API_KEY is not set");
+
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "statistics");
+  url.searchParams.set("id", channelId);
+  url.searchParams.set("key", apiKey);
+
+  const res = await fetch(url.toString(), { next: { revalidate: 60 } });
+  if (!res.ok) {
+    throw new Error(`YouTube API error: ${res.status} ${await res.text()}`);
+  }
+  const stats = (await res.json()).items?.[0]?.statistics;
+  if (!stats || stats.hiddenSubscriberCount) return null;
+  return Number(stats.subscriberCount ?? 0);
+}

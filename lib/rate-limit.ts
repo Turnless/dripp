@@ -28,6 +28,8 @@ export const LIMITS = {
   platformLink: { perUser: 10, perIp: 50, windowSeconds: 60 },
   // Checked once per app load; confirm is retried like tip confirm.
   refunds: { perUser: 30, perIp: 150, windowSeconds: 60 },
+  // The Creator page refreshes its live numbers about once a minute.
+  creatorStats: { perUser: 30, perIp: 150, windowSeconds: 60 },
 } satisfies Record<string, Limit>;
 
 function clientIp(req: Request): string | null {

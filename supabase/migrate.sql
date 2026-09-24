@@ -157,6 +157,9 @@ alter table chain_logs drop constraint if exists chain_logs_kind_check;
 alter table chain_logs add constraint chain_logs_kind_check
   check (kind in ('tip', 'escrow_deposit', 'escrow_refund', 'withdrawal_fee', 'withdrawal_payout'));
 
+-- 4b. public profile switch (/u/<handle>) ---------------------------------
+alter table users add column if not exists profile_public boolean not null default true;
+
 -- 5. live tip alerts for the overlay -------------------------------------
 do $$ begin
   alter publication supabase_realtime add table tips;
