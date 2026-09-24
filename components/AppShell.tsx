@@ -8,7 +8,6 @@ import { motion, useReducedMotion } from "motion/react";
 import { CircleDollarSign, History, Radio, Send, UserRound, type LucideIcon } from "lucide-react";
 import { SendFlow, type SendPrefill } from "@/components/send/SendFlow";
 import { Wordmark } from "@/components/ui/misc";
-import { LiquidBar, useHoverLens } from "@/components/ui/LiquidGlass";
 import { useAccount } from "@/components/account";
 import { springs } from "@/components/motion";
 import { useAutoRefunds, useFinishUnconfirmedTips, type ReturnedTips } from "@/lib/money-client";
@@ -37,7 +36,7 @@ function navFor(mode: string | null): NavItem[] {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { mode, avatarUrl } = useAccount();
+  const { mode, avatarUrl, username } = useAccount();
   useFinishUnconfirmedTips();
   const [notice, setNotice] = useState<string | null>(null);
   const clearNotice = useCallback(() => setNotice(null), []);
@@ -60,46 +59,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
   const closeSend = useCallback(() => setSendOpen(false), []);
   const nav = navFor(mode);
-  const lens = useHoverLens("app-nav");
   const name = user?.google?.name ?? "dripp";
 
   return (
     <SendContext.Provider value={{ openSend, openSendTo }}>
       <div className="bg-field min-h-dvh">
-        {/* Desktop: floating glass command bar */}
-        <header className="fixed inset-x-0 top-4 z-30 hidden justify-center px-6 lg:flex">
-          <LiquidBar className="flex w-full max-w-[1040px] items-center justify-between rounded-full py-2 pl-5 pr-2">
-            <Link href="/" aria-label="dripp, go to Money" className="pressable">
+        {/* Desktop: a glass sidebar -- Send first, then the pages, then the account */}
+        <aside className="fixed inset-y-4 left-4 z-30 hidden w-[248px] lg:block">
+          <div className="liquid-glass flex h-full flex-col rounded-[28px] p-3">
+            <Link href="/" aria-label="dripp, go to Money" className="pressable self-start px-3 pb-2 pt-3">
               <Wordmark />
             </Link>
-            <nav aria-label="Main" className="flex items-center gap-1 rounded-full bg-deep/[0.04] p-1" {...lens.groupProps}>
+            <button
+              onClick={openSend}
+              className="pressable mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-primary text-[0.9375rem] font-semibold text-on-primary shadow-primary hover:bg-primary-hover"
+            >
+              <Send className="h-4 w-4" aria-hidden /> Send a tip
+            </button>
+            <nav aria-label="Main" className="mt-6 flex flex-col gap-1">
               {nav.map((item) => (
-                <NavPill
-                  key={item.href}
-                  item={item}
-                  active={pathname === item.href}
-                  hoverProps={lens.itemProps(item.href)}
-                  lens={lens.renderLens(item.href)}
-                />
+                <SideLink key={item.href} item={item} active={pathname === item.href} />
               ))}
             </nav>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={openSend}
-                className="pressable flex h-10 items-center gap-2 rounded-full bg-primary px-5 text-[0.9375rem] font-semibold text-on-primary shadow-primary hover:bg-primary-hover"
-              >
-                <Send className="h-4 w-4" aria-hidden /> Send
-              </button>
-              <Link
-                href="/profile"
-                aria-label="Profile"
-                className="pressable rounded-full"
-              >
-                <Avatar src={avatarUrl} name={name} />
-              </Link>
-            </div>
-          </LiquidBar>
-        </header>
+            <Link
+              href="/profile"
+              className="pressable mt-auto flex items-center gap-3 rounded-[20px] p-2.5 hover:bg-text/[0.05]"
+            >
+              <Avatar src={avatarUrl} name={name} />
+              <span className="min-w-0">
+                <span className="block truncate text-[0.9375rem] font-bold">{name}</span>
+                {username && <span className="block truncate text-caption text-muted">@{username}</span>}
+              </span>
+            </Link>
+          </div>
+        </aside>
 
         {/* Mobile header */}
         <header className="flex items-center justify-between px-4 pb-2 pt-[max(1rem,env(safe-area-inset-top))] lg:hidden">
@@ -113,8 +106,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </header>
 
-        <main className="px-4 pb-36 pt-4 lg:px-8 lg:pb-16 lg:pt-32">
-          <div className="mx-auto w-full max-w-[720px]">{children}</div>
+        <main className="px-4 pb-36 pt-4 lg:pb-12 lg:pl-[296px] lg:pr-10 lg:pt-10">
+          <div className="mx-auto w-full max-w-[720px] lg:max-w-[1100px]">{children}</div>
         </main>
 
         {/* Mobile: floating tab bar with a raised Send button in the middle */}
@@ -150,40 +143,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Desktop pill link. The active highlight slides between items; a glass lens
- * glides under whichever item is hovered.
- */
-function NavPill({
-  item,
-  active,
-  hoverProps,
-  lens,
-}: {
-  item: NavItem;
-  active: boolean;
-  hoverProps: ReturnType<ReturnType<typeof useHoverLens>["itemProps"]>;
-  lens: React.ReactNode;
-}) {
+/** Desktop sidebar link; the yellow highlight slides between items. */
+function SideLink({ item, active }: { item: NavItem; active: boolean }) {
   const reduce = useReducedMotion();
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      {...hoverProps}
-      className={`relative flex h-9 items-center gap-2 rounded-full px-4 text-[0.9375rem] font-medium transition-colors ${
-        active ? "text-text" : "text-muted hover:text-text"
+      className={`relative flex h-11 items-center gap-3 rounded-full px-4 text-[0.9375rem] font-semibold transition-colors ${
+        active ? "text-text" : "text-muted hover:bg-text/[0.05] hover:text-text"
       }`}
     >
-      {lens}
       {active && (
         <motion.span
-          layoutId="nav-pill-desktop"
-          className="absolute inset-0 rounded-full bg-brand shadow-[0_6px_16px_rgba(17,17,17,0.14)]"
+          layoutId="nav-side-desktop"
+          className="absolute inset-0 rounded-full bg-brand shadow-[0_6px_16px_rgba(17,17,17,0.12)]"
           transition={reduce ? { duration: 0 } : springs.snappy}
         />
       )}
-      <item.icon className="relative h-4 w-4" strokeWidth={1.9} aria-hidden />
+      <item.icon className="relative h-5 w-5" strokeWidth={1.9} aria-hidden />
       <span className="relative">{item.label}</span>
     </Link>
   );
