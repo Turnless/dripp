@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { CenterScreen, Wordmark } from "@/components/ui/misc";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { Landing } from "@/components/landing/Landing";
-import { AccountContext, type Mode, type PlatformLink } from "@/components/account";
+import { AccountContext, type Mode, type PlatformLink, type Verification } from "@/components/account";
 import type { ProfileVisibility } from "@/lib/profile-visibility";
 import { springs } from "@/components/motion";
 import { readError } from "@/lib/hooks";
@@ -18,6 +18,7 @@ type Me = {
   links: PlatformLink[];
   avatarUrl: string | null;
   profileVisibility: ProfileVisibility;
+  verification?: Verification;
   canWithdrawToAddress: boolean;
 };
 type SetupState = { status: "loading" } | { status: "error" } | { status: "ready"; me: Me };
@@ -112,6 +113,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     [getAccessToken, state, setMe]
   );
 
+  const refreshVerification = useCallback(async (): Promise<Verification> => {
+    const token = await getAccessToken();
+    const res = await fetch("/api/me/verify", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(await readError(res));
+    const { verification } = (await res.json()) as { verification: Verification };
+    if (state.status === "ready") setMe({ ...state.me, verification });
+    return verification;
+  }, [getAccessToken, state, setMe]);
+
   // Only the very first load shows the app skeleton.
   if (!ready) return <AppSkeleton />;
 
@@ -141,6 +154,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         avatarUrl: state.me.avatarUrl,
         profileVisibility: state.me.profileVisibility,
         canWithdrawToAddress: !!state.me.canWithdrawToAddress,
+        verification: state.me.verification ?? { verified: false, via: null },
+        refreshVerification,
         setMode,
         setProfileVisibility,
       }}

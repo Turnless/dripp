@@ -24,6 +24,13 @@ create table users (
   show_sent boolean not null default true,
   show_tip_counts boolean not null default true,
   show_subscribers boolean not null default true,
+  -- Viewer verification (lib/viewer-verification.ts): how this user proved
+  -- they're a person -- 'youtube' (an established YouTube account, checked
+  -- when they link it), 'phone' (a phone number verified through Privy) or
+  -- 'topup' (later, with the onramp). Having tipped at least $1 of their own
+  -- money also counts, but is computed, not stored (viewer_verifications).
+  human_verified_at timestamptz,
+  human_verified_via text check (human_verified_via in ('youtube', 'phone', 'topup')),
   created_at timestamptz not null default now()
 );
 

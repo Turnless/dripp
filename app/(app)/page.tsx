@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowDownToLine, ArrowRight, History, Plus, Send, Users, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, History, Plus, Send, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 import { useSend } from "@/components/AppShell";
 import { useAccount } from "@/components/account";
 import { WithdrawSheet } from "@/components/WithdrawSheet";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { ActivityRow } from "@/components/ActivityRow";
+import { useVerifyPhone } from "@/components/VerificationCard";
 import type { ActivityItem, WeekSummary } from "@/app/api/activity/route";
 import { useBalance, useRecentWithWeek } from "@/lib/money-client";
 import { CountUp, Stagger, StaggerItem, springs } from "@/components/motion";
@@ -142,8 +143,9 @@ function ago(at: string): string {
  * repeat of your last tip.
  */
 function Spotlight({ items, week }: { items: ActivityItem[] | null; week: WeekSummary | null }) {
-  const { mode, links } = useAccount();
+  const { mode, links, verification } = useAccount();
   const { openSend, openSendTo } = useSend();
+  const verifyPhone = useVerifyPhone();
   if (items === null) return <Skeleton className="h-[76px] w-full rounded-card" />;
 
   if (mode === "creator" && week && week.count > 0) {
@@ -182,6 +184,17 @@ function Spotlight({ items, week }: { items: ActivityItem[] | null; week: WeekSu
         icon={ArrowRight}
         title="Get tipped too"
         body="Link your YouTube channel so people can tip you."
+      />
+    );
+  }
+
+  if (!verification.verified) {
+    return (
+      <SpotlightCard
+        onClick={verifyPhone.start}
+        icon={ShieldCheck}
+        title="Verify to receive rewards"
+        body={verifyPhone.error ?? "Streamers can include you when they reward their viewers."}
       />
     );
   }

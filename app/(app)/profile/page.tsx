@@ -6,6 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { ArrowUpRight, ChevronRight, HeartHandshake, LogOut, Radio } from "lucide-react";
 import { useAccount } from "@/components/account";
 import { ChannelCard } from "@/components/LinkChannel";
+import { VerificationCard } from "@/components/VerificationCard";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -47,6 +48,10 @@ export default function ProfilePage() {
             </span>
           </div>
         </GlassCard>
+      </StaggerItem>
+
+      <StaggerItem>
+        <VerificationCard />
       </StaggerItem>
 
       {/* Viewers link their channel here; creators do it on the Creator page. */}

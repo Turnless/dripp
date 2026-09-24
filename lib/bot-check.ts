@@ -1,16 +1,55 @@
 /**
- * Lightweight bot/real heuristics (PRD 8.5). Pure functions -- the data comes
- * from `tipper_signals` (supabase/functions.sql) and the YouTube API -- so the
- * rules are easy to test and to tune. They're signals, not proof: the UI says
- * "looks like", and a creator can always include someone anyway.
+ * Bot/real rules (PRD 8.5). Pure functions -- the data comes from SQL
+ * (`tipper_signals`, `viewer_verifications`) and the YouTube API -- so the
+ * rules are easy to test and tune. Viewers never see these thresholds; they
+ * only see whether they're verified.
  *
- * Not checked yet: where a wallet's money came from (a funding-source
- * cluster). That needs an onchain indexer; the RPC can't scan a wallet's
- * whole history cheaply.
+ * A person is verified by ANY of:
+ *   - an established YouTube account, checked when they link it: channel
+ *     older than 3 months, subscribed to more than 10 channels, and 20 or
+ *     more liked videos (viewers don't need to upload anything)
+ *   - a phone number verified through Privy
+ *   - having tipped at least $1 of their own money (later: a top-up)
+ *
+ * Not checked yet: where a wallet's money came from (needs an onchain indexer).
  */
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
+
+// ---------- the YouTube viewer check (run when a channel is linked) ----------
+
+export const VIEWER_MIN_CHANNEL_AGE_MS = 90 * DAY;
+/** "More than 10" subscriptions. */
+export const VIEWER_MIN_SUBSCRIPTIONS = 11;
+export const VIEWER_MIN_LIKED_VIDEOS = 20;
+/** Own money tipped that counts as verification. Keep in step with viewer_verifications (functions.sql). */
+export const MIN_TIPPED_CENTS = 100;
+
+export type YoutubeViewerFacts = {
+  channelCreatedAt: Date;
+  subscriptions: number;
+  likedVideos: number;
+};
+
+export function passesYoutubeViewerCheck(f: YoutubeViewerFacts, now: Date = new Date()): boolean {
+  return (
+    now.getTime() - f.channelCreatedAt.getTime() >= VIEWER_MIN_CHANNEL_AGE_MS &&
+    f.subscriptions >= VIEWER_MIN_SUBSCRIPTIONS &&
+    f.likedVideos >= VIEWER_MIN_LIKED_VIDEOS
+  );
+}
+
+/** youtube / phone / topup are proofs of their own; 'tipped' is computed from tips. */
+export type VerifiedVia = "youtube" | "phone" | "topup" | "tipped";
+const STRONG: VerifiedVia[] = ["youtube", "phone", "topup"];
+
+export const VERIFIED_VIA_TEXT: Record<VerifiedVia, string> = {
+  youtube: "Verified with their YouTube account",
+  phone: "Verified their phone number",
+  topup: "Added money with a card",
+  tipped: "Has tipped with their own money",
+};
 
 /** Joined this close to their first tip to this creator = a "fresh" account. */
 export const FRESH_ACCOUNT_MS = HOUR;
@@ -18,18 +57,13 @@ export const FRESH_ACCOUNT_MS = HOUR;
 export const SWARM_WINDOW_MS = 30 * 60 * 1000;
 /** ...and number at least this many are treated as a swarm. */
 export const SWARM_MIN_ACCOUNTS = 3;
-/** An account this old, with some history, looks like a real person. */
-export const ESTABLISHED_ACCOUNT_MS = 7 * DAY;
 
 export type TipperSignals = {
   senderId: string;
   accountCreatedAt: Date;
-  hasVerifiedChannel: boolean;
   firstTipAt: Date;
-  /** Different people this account has tipped, ever. */
-  recipientsCount: number;
-  /** Different days this account has tipped on, ever. */
-  activeDays: number;
+  /** How they're verified as a person, or null (viewer_verifications). */
+  verifiedVia: VerifiedVia | null;
 };
 
 export type TipperVerdict = "real" | "new" | "suspicious";
@@ -38,17 +72,19 @@ export type ClassifiedTipper = { senderId: string; verdict: TipperVerdict; reaso
 
 /**
  * Sorts a creator's tippers into:
- *   real       -- verified a channel, or an account over 7 days old that has
- *                 tipped more than one person or on more than one day
+ *   real       -- verified (youtube / phone / top-up, or tipped $1+ of their
+ *                 own money)
  *   suspicious -- part of a swarm: at least 3 accounts that each signed up
  *                 within an hour of first tipping this creator, all within
- *                 30 minutes of each other (typical of a viewbot run)
- *   new        -- everyone else: not enough history to tell yet
- * A verified channel is never suspicious.
+ *                 30 minutes of each other (typical of a viewbot run). Only
+ *                 a youtube / phone / top-up verification overrides this --
+ *                 a farm can afford a dollar per account.
+ *   new        -- everyone else: not verified yet
  */
-export function classifyTippers(tippers: TipperSignals[], now: Date = new Date()): ClassifiedTipper[] {
+export function classifyTippers(tippers: TipperSignals[]): ClassifiedTipper[] {
+  const strong = (t: TipperSignals) => !!t.verifiedVia && STRONG.includes(t.verifiedVia);
   const fresh = tippers
-    .filter((t) => !t.hasVerifiedChannel && t.firstTipAt.getTime() - t.accountCreatedAt.getTime() < FRESH_ACCOUNT_MS)
+    .filter((t) => !strong(t) && t.firstTipAt.getTime() - t.accountCreatedAt.getTime() < FRESH_ACCOUNT_MS)
     .sort((a, b) => a.firstTipAt.getTime() - b.firstTipAt.getTime());
 
   const swarm = new Map<string, number>(); // senderId -> accounts in its window (incl. itself)
@@ -59,8 +95,8 @@ export function classifyTippers(tippers: TipperSignals[], now: Date = new Date()
   }
 
   return tippers.map((t) => {
-    if (t.hasVerifiedChannel) {
-      return { senderId: t.senderId, verdict: "real", reason: "Verified their own channel" };
+    if (strong(t)) {
+      return { senderId: t.senderId, verdict: "real", reason: VERIFIED_VIA_TEXT[t.verifiedVia!] };
     }
     const near = swarm.get(t.senderId);
     if (near) {
@@ -70,11 +106,10 @@ export function classifyTippers(tippers: TipperSignals[], now: Date = new Date()
         reason: `Joined minutes before tipping, along with ${near - 1} other new ${near - 1 === 1 ? "account" : "accounts"}`,
       };
     }
-    const age = now.getTime() - t.accountCreatedAt.getTime();
-    if (age >= ESTABLISHED_ACCOUNT_MS && (t.recipientsCount >= 2 || t.activeDays >= 2)) {
-      return { senderId: t.senderId, verdict: "real", reason: "Established account with a tipping history" };
+    if (t.verifiedVia === "tipped") {
+      return { senderId: t.senderId, verdict: "real", reason: VERIFIED_VIA_TEXT.tipped };
     }
-    return { senderId: t.senderId, verdict: "new", reason: "Not enough history yet" };
+    return { senderId: t.senderId, verdict: "new", reason: "Not verified yet" };
   });
 }
 
@@ -86,32 +121,31 @@ export function breakdown(classified: ClassifiedTipper[]): Breakdown {
   return out;
 }
 
-// ---------- reward drops: checking a platform account before tipping it ----------
+// ---------- reward drops: checking recipients before tipping them ----------
 
-/** A channel younger than this, with no videos and almost no subscribers, looks like a throwaway. */
-export const NEW_CHANNEL_MS = 30 * DAY;
-export const FEW_SUBSCRIBERS = 10;
-
-export type ChannelFacts = {
-  publishedAt: Date;
-  videoCount: number;
-  /** Null when the channel hides it. */
-  subscriberCount: number | null;
-};
-
+/**
+ * What a streamer sees next to each person in a reward drop. Verification
+ * only matters for receiving group rewards: unverified and suspicious people
+ * are skipped by default (the streamer can include them); people not on
+ * dripp yet are included -- their tip waits for them.
+ */
 export type RecipientVerdict =
-  | { verdict: "ok" }
+  | { verdict: "verified"; reason: string }
+  | { verdict: "unverified"; reason: string }
   | { verdict: "suspicious"; reason: string }
+  | { verdict: "not_joined"; reason: string }
   | { verdict: "unknown"; reason: string };
 
-export function classifyChannel(facts: ChannelFacts, now: Date = new Date()): RecipientVerdict {
-  const age = now.getTime() - facts.publishedAt.getTime();
-  if (age < NEW_CHANNEL_MS && facts.videoCount === 0 && (facts.subscriberCount ?? 0) < FEW_SUBSCRIBERS) {
-    const days = Math.max(0, Math.floor(age / DAY));
-    return {
-      verdict: "suspicious",
-      reason: `Channel is ${days === 0 ? "less than a day" : `${days} ${days === 1 ? "day" : "days"}`} old with no videos`,
-    };
-  }
-  return { verdict: "ok" };
+export const SKIP_BY_DEFAULT: RecipientVerdict["verdict"][] = ["unverified", "suspicious"];
+
+export function recipientVerdict(
+  onDripp: boolean,
+  verifiedVia: VerifiedVia | null,
+  swarmReason: string | null
+): RecipientVerdict {
+  if (!onDripp) return { verdict: "not_joined", reason: "Not on dripp yet. Their tip waits for them" };
+  const strong = !!verifiedVia && STRONG.includes(verifiedVia);
+  if (swarmReason && !strong) return { verdict: "suspicious", reason: swarmReason };
+  if (verifiedVia) return { verdict: "verified", reason: VERIFIED_VIA_TEXT[verifiedVia] };
+  return { verdict: "unverified", reason: "Hasn't verified yet" };
 }

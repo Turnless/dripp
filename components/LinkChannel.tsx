@@ -11,6 +11,7 @@ import { springs } from "@/components/motion";
 import { useAuthedFetch, readError } from "@/lib/hooks";
 import { announceMoneyChanged } from "@/lib/money-client";
 import { formatUsd } from "@/lib/format";
+import { VerifyPhoneButton } from "@/components/VerificationCard";
 
 /**
  * Linking a YouTube channel -- open to everyone: creators do it on the
@@ -35,6 +36,8 @@ const LINK_ERRORS: Record<string, string> = {
 function useLinkOutcome(page: LinkPage) {
   const [collectedCents, setCollectedCents] = useState(0);
   const [linkError, setLinkError] = useState<string | null>(null);
+  // Set after a link: did linking this channel verify them as a viewer?
+  const [linkedVerified, setLinkedVerified] = useState<boolean | null>(null);
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const collected = Number(search.get("collected"));
@@ -42,13 +45,14 @@ function useLinkOutcome(page: LinkPage) {
       setCollectedCents(collected);
       announceMoneyChanged();
     }
+    if (search.has("verified")) setLinkedVerified(search.get("verified") === "1");
     const error = search.get("link_error");
     if (error) setLinkError(LINK_ERRORS[error] ?? LINK_ERRORS.failed);
-    if (search.has("collected") || search.has("link_error") || search.has("linked")) {
+    if (search.has("collected") || search.has("link_error") || search.has("linked") || search.has("verified")) {
       window.history.replaceState(null, "", `/${page}`);
     }
   }, [page]);
-  return { collectedCents, linkError, setLinkError };
+  return { collectedCents, linkError, setLinkError, linkedVerified };
 }
 
 /** Celebration card when linking released tips that were waiting. */
@@ -87,7 +91,8 @@ export function ChannelCard({
   const { links } = useAccount();
   const authedFetch = useAuthedFetch();
   const [linking, setLinking] = useState(false);
-  const { collectedCents, linkError, setLinkError } = useLinkOutcome(page);
+  const { collectedCents, linkError, setLinkError, linkedVerified } = useLinkOutcome(page);
+  const { verification } = useAccount();
   const youtube = links.find((l) => l.platform === "youtube");
 
   async function linkYoutube() {
@@ -110,6 +115,25 @@ export function ChannelCard({
   return (
     <div className="flex flex-col gap-6">
       {collectedCents > 0 && <CollectedBanner cents={collectedCents} />}
+      {linkedVerified !== null && (
+        <GlassCard className="flex flex-col gap-3 p-5" role="status">
+          {linkedVerified || verification.verified ? (
+            <p className="flex items-center gap-2 font-bold">
+              <BadgeCheck className="h-5 w-5 shrink-0" aria-hidden /> Channel linked. You&apos;re verified.
+            </p>
+          ) : (
+            <>
+              <div>
+                <p className="font-bold">Channel linked. One more step</p>
+                <p className="text-caption text-muted">
+                  Verify your phone so streamers can include you when they reward their viewers.
+                </p>
+              </div>
+              <VerifyPhoneButton />
+            </>
+          )}
+        </GlassCard>
+      )}
       <GlassCard className="flex flex-col gap-4 p-6">
         {youtube ? (
           <div className="flex items-center gap-4">

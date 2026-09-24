@@ -1,6 +1,6 @@
 import "server-only";
 import { supabaseServer } from "@/lib/supabase";
-import { classifyTippers, type ClassifiedTipper } from "@/lib/bot-check";
+import { classifyTippers, type ClassifiedTipper, type VerifiedVia } from "@/lib/bot-check";
 
 /** How far back the creator's bot/real breakdown looks. */
 export const TIPPER_WINDOW_DAYS = 30;
@@ -14,10 +14,8 @@ export async function classifiedTippers(creatorId: string): Promise<ClassifiedTi
     ((data ?? []) as Record<string, unknown>[]).map((r) => ({
       senderId: String(r.sender_id),
       accountCreatedAt: new Date(String(r.account_created_at)),
-      hasVerifiedChannel: r.has_verified_channel === true,
       firstTipAt: new Date(String(r.first_tip_at)),
-      recipientsCount: Number(r.recipients_count ?? 0),
-      activeDays: Number(r.active_days ?? 0),
+      verifiedVia: (r.verified_via ?? null) as VerifiedVia | null,
     }))
   );
 }

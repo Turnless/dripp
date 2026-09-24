@@ -5,6 +5,7 @@ import { normalizeHandle } from "@/lib/username-resolve";
 import { unitsToCents } from "@/lib/chain";
 import { tipVaultAddress } from "@/lib/tipvault";
 import { claimEscrowFor } from "@/lib/escrow-claims";
+import { checkYoutubeViewer, verificationFor } from "@/lib/viewer-verification";
 
 /**
  * Step 2 of platform linking: exchange the OAuth code for a token, fetch the
@@ -54,6 +55,9 @@ export async function GET(
   let platformUsername: string;
   let channelId: string;
   let avatarUrl: string | null;
+  // For the viewer verification check, run once the channel is linked.
+  let youtubeAccessToken: string | null = null;
+  let channelCreatedAt: string | undefined;
 
   if (params.provider === "youtube") {
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -87,6 +91,8 @@ export async function GET(
     channelId = channel.id as string;
     const thumbs = channel.snippet?.thumbnails;
     avatarUrl = (thumbs?.medium?.url ?? thumbs?.default?.url ?? null) as string | null;
+    youtubeAccessToken = tokenJson.access_token as string;
+    channelCreatedAt = channel.snippet?.publishedAt as string | undefined;
   } else if (params.provider === "kick") {
     // TODO: implement Kick's token exchange + "me" endpoint the same way,
     // once confirmed against current Kick API docs.
@@ -140,8 +146,24 @@ export async function GET(
     }
   }
 
+  // Viewer verification (lib/bot-check.ts): linking a channel is the moment
+  // an established YouTube account verifies its owner. Anyone who doesn't
+  // pass (and isn't verified another way) is asked to verify their phone.
+  let viewerVerified = false;
+  try {
+    viewerVerified = (await verificationFor(verified.userId)).verified;
+    if (!viewerVerified && youtubeAccessToken) {
+      viewerVerified = await checkYoutubeViewer(verified.userId, youtubeAccessToken, channelCreatedAt);
+    }
+  } catch (err) {
+    // Linking still succeeded; they can verify with their phone instead.
+    console.error("viewer verification check failed", err);
+  }
+
   const res = NextResponse.redirect(
-    `${process.env.APP_BASE_URL}${back}?linked=${params.provider}${collectedCents ? `&collected=${collectedCents}` : ""}`
+    `${process.env.APP_BASE_URL}${back}?linked=${params.provider}&verified=${viewerVerified ? 1 : 0}${
+      collectedCents ? `&collected=${collectedCents}` : ""
+    }`
   );
   res.cookies.delete({ name: LINK_NONCE_COOKIE, path: "/api/platform/callback" });
   return res;

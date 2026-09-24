@@ -99,8 +99,9 @@ app/                          Next.js App Router
     tip/confirm/              POST -- verify the tx onchain against the intent, then record the tip
     withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (to a wallet address, testers only, until Mercuryo)
     creator/stats/            GET -- live subscriber count of the caller's linked channel
-    creator/tippers/          GET -- 30-day bot/real breakdown of the caller's tippers (counts only)
-    bot-check/                POST -- flag likely bots in a reward drop's recipient list
+    me/verify/                POST -- re-check viewer verification (after verifying a phone)
+    creator/tippers/          GET -- 30-day verified / not verified / suspicious breakdown of the caller's tippers
+    bot-check/                POST -- verification + swarm check for a reward drop's recipients
     balance/                  GET -- balance in cents
     activity/                 GET -- history (tips, escrow, withdrawals); ?week=1 adds the last 7 days received
     username/resolve/         GET -- check if a username exists/is verifiable
@@ -119,7 +120,8 @@ lib/
   tip-plan.ts                 Where a tip goes + the exact calls (saved as a tip intent by prepare)
   withdraw-plan.ts            Withdrawal calls: 1% fee to treasury + payout, batched
   withdraw-access.ts          Who may withdraw to a wallet address (WITHDRAW_TO_ADDRESS_EMAILS)
-  bot-check.ts                Bot/real rules for tippers and reward-drop recipients (pure, tested)
+  bot-check.ts                Viewer verification + bot/real rules (pure, tested)
+  viewer-verification.ts      YouTube check at link time, phone via Privy, reading verification
   tipper-check.ts             Loads a creator's tipper signals and classifies them
   profile-visibility.ts       What the public profile shows (the "What people see" options)
   tipvault.ts                 TipVault ABI + handle hash
@@ -168,6 +170,18 @@ supabase/
 
 After pulling changes that touch `supabase/`, run `migrate.sql` then
 `functions.sql` again on your existing database (both are safe to re-run).
+
+## Viewer verification (phone)
+
+Viewers who don't pass the YouTube check when they link a channel are asked
+to verify a phone number through Privy's own popup. Turn it on once:
+
+1. Privy dashboard -> your app -> **Login methods**: enable **SMS**.
+   Sign-in stays Google-only, because `app/providers.tsx` sets
+   `loginMethods: ["google"]`; SMS is only used to *link* a phone.
+2. Check your Privy plan's SMS limits and the countries you need.
+3. Test it: Profile -> "One more step" -> **Verify phone**. The card should
+   switch to **Verified**.
 
 ## Gas-free transfers setup
 
@@ -297,9 +311,10 @@ NextAuth on top (see the comment at the top of `lib/oauth.ts`).
 - In-app usernames: only YouTube/Kick handles can be tipped, so someone who
   hasn't linked a channel can't receive tips yet (anyone can link one --
   viewers on Profile, creators on the Creator page)
-- Funding-source clustering for the bot check (needs an onchain indexer).
-  The bot/real breakdown and the reward-drop filter are built on account,
-  channel and timing signals (`lib/bot-check.ts`); `bot_scores` is unused.
+- More bot signals: funding-source clustering (needs an onchain indexer) and
+  "chatted in a dripp creator's live stream" (needs the streamer's live-chat
+  permission). Verification and the swarm check are built
+  (`lib/bot-check.ts`); `bot_scores` is unused.
 - Row Level Security *policies* in Supabase -- RLS itself is enabled on
   every table and the browser never talks to Supabase directly (only the
   server, with the service-role key); add narrow policies only if that

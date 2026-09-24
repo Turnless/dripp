@@ -5,9 +5,9 @@ import { rateLimit } from "@/lib/rate-limit";
 import { supabaseServer } from "@/lib/supabase";
 import { MAX_BULK_RECIPIENTS } from "@/lib/fees";
 import { normalizeHandle, platformChannel } from "@/lib/username-resolve";
-import { youtubeChannelFacts, type YoutubeChannelFacts } from "@/lib/youtube";
-import { classifyChannel, type RecipientVerdict } from "@/lib/bot-check";
+import { recipientVerdict, type RecipientVerdict } from "@/lib/bot-check";
 import { classifiedTippers } from "@/lib/tipper-check";
+import { verificationsFor } from "@/lib/viewer-verification";
 
 const BodySchema = z.object({
   platform: z.enum(["youtube", "kick"]),
@@ -18,11 +18,10 @@ export type RecipientCheck = { handle: string } & RecipientVerdict;
 
 /**
  * Checks a reward drop's recipients before a creator sends it (PRD 7.4 /
- * 8.5). A handle is flagged when its YouTube channel looks like a throwaway
- * (new, no videos, almost no subscribers) or when its owner is on dripp and
- * was part of a swarm of new accounts tipping this creator. Handles that
- * can't be checked (Kick, not found, the API is down) come back "unknown"
- * and are never flagged.
+ * 8.5): for each handle on dripp, whether its owner is a verified viewer
+ * (lib/bot-check.ts) and whether they were part of a swarm of new accounts
+ * tipping this creator. Handles not on dripp yet come back "not_joined"
+ * (their tip waits in escrow); anything that can't be looked up, "unknown".
  */
 export async function POST(req: NextRequest) {
   const user = await getAuthenticatedUser(req);
@@ -39,12 +38,6 @@ export async function POST(req: NextRequest) {
   const { platform } = parsed.data;
   const handles = Array.from(new Set(parsed.data.handles.map(normalizeHandle)));
 
-  if (platform !== "youtube") {
-    return NextResponse.json({
-      results: handles.map((handle) => ({ handle, verdict: "unknown", reason: "Kick accounts can't be checked yet" })),
-    });
-  }
-
   // Handle -> channel (cached lookups, one API call per uncached handle).
   const channels = new Map<string, string>();
   await Promise.all(
@@ -57,44 +50,35 @@ export async function POST(req: NextRequest) {
       }
     })
   );
-  const ids = Array.from(new Set(channels.values()));
 
-  let facts = new Map<string, YoutubeChannelFacts>();
   try {
-    facts = await youtubeChannelFacts(ids);
+    // Channel -> dripp user, their verification, and this creator's swarm verdicts.
+    const ids = Array.from(new Set(channels.values()));
+    const { data: links, error } = ids.length
+      ? await supabaseServer()
+          .from("platform_links")
+          .select("user_id, channel_id")
+          .eq("platform", platform)
+          .in("channel_id", ids)
+      : { data: [], error: null };
+    if (error) throw error;
+    const owner = new Map((links ?? []).map((l) => [l.channel_id as string, l.user_id as string]));
+    const [verified, tippers] = await Promise.all([
+      verificationsFor(Array.from(new Set(owner.values()))),
+      classifiedTippers(user.id),
+    ]);
+    const swarm = new Map(tippers.filter((t) => t.verdict === "suspicious").map((t) => [t.senderId, t.reason]));
+
+    const results: RecipientCheck[] = handles.map((handle) => {
+      const id = channels.get(handle);
+      if (!id) return { handle, verdict: "unknown", reason: "Couldn't find this channel" };
+      const userId = owner.get(id);
+      if (!userId) return { handle, ...recipientVerdict(false, null, null) };
+      return { handle, ...recipientVerdict(true, verified.get(userId) ?? null, swarm.get(userId) ?? null) };
+    });
+    return NextResponse.json({ results });
   } catch (err) {
-    console.error("bot check: channel details failed", err);
+    console.error("bot check failed", err);
+    return NextResponse.json({ error: "We couldn't check these right now." }, { status: 500 });
   }
-
-  // Recipients who are on dripp and were part of a swarm tipping this creator.
-  const swarmChannels = new Map<string, string>();
-  try {
-    const suspicious = (await classifiedTippers(user.id)).filter((t) => t.verdict === "suspicious");
-    if (suspicious.length && ids.length) {
-      const { data: links } = await supabaseServer()
-        .from("platform_links")
-        .select("user_id, channel_id")
-        .eq("platform", "youtube")
-        .in("channel_id", ids)
-        .in("user_id", suspicious.map((s) => s.senderId));
-      for (const l of links ?? []) {
-        const reason = suspicious.find((s) => s.senderId === l.user_id)?.reason;
-        if (l.channel_id && reason) swarmChannels.set(l.channel_id, reason);
-      }
-    }
-  } catch (err) {
-    console.error("bot check: tipper check failed", err);
-  }
-
-  const results: RecipientCheck[] = handles.map((handle) => {
-    const id = channels.get(handle);
-    if (!id) return { handle, verdict: "unknown", reason: "Couldn't find this channel" };
-    const swarm = swarmChannels.get(id);
-    if (swarm) return { handle, verdict: "suspicious", reason: swarm };
-    const f = facts.get(id);
-    if (!f) return { handle, verdict: "unknown", reason: "Couldn't check this channel right now" };
-    return { handle, ...classifyChannel(f) };
-  });
-
-  return NextResponse.json({ results });
 }

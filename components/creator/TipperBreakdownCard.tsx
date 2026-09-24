@@ -21,16 +21,16 @@ type Segment = {
 const SEGMENTS: Segment[] = [
   {
     key: "real",
-    label: "Look real",
-    detail: "Verified a channel, or have a tipping history",
+    label: "Verified",
+    detail: "Verified with YouTube or a phone, or tipped with their own money",
     icon: CheckCircle2,
     fill: "bg-positive",
     ink: "text-positive",
   },
   {
     key: "new",
-    label: "New",
-    detail: "Joined recently, not enough history yet",
+    label: "Not verified yet",
+    detail: "Haven't verified yet. Most people are just new",
     icon: Clock,
     fill: "bg-muted",
     ink: "text-muted",
@@ -49,8 +49,8 @@ const pct = (n: number, total: number) => (total ? Math.round((n / total) * 100)
 
 /**
  * "Who's tipping you" (PRD 7.2 bot/real breakdown): of the people who tipped
- * this creator in the last 30 days, how many look real, are new, or look
- * like a swarm of throwaway accounts (lib/bot-check.ts). Counts only.
+ * this creator in the last 30 days, how many are verified, not verified yet,
+ * or look like a swarm of throwaway accounts (lib/bot-check.ts). Counts only.
  */
 export function TipperBreakdownCard() {
   const authedFetch = useAuthedFetch();
@@ -105,7 +105,7 @@ export function TipperBreakdownCard() {
             <span className="num text-[2rem] font-extrabold leading-none tracking-[-0.045em] text-text">
               {pct(data.real, data.total)}%
             </span>{" "}
-            look like real people
+            are verified people
           </p>
 
           {/* One bar, part-to-whole. Segments are separated by a 2px gap. */}
@@ -158,8 +158,8 @@ export function TipperBreakdownCard() {
           </ul>
 
           <p className="text-caption text-muted">
-            These are signals, not proof. Accounts that look suspicious are skipped by default when you
-            reward your viewers, and you can always include them.
+            These are signals, not proof. When you reward your viewers, people who aren&apos;t verified or look
+            suspicious are skipped by default, and you can always include them.
           </p>
         </>
       )}

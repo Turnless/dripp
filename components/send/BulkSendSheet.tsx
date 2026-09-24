@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, Loader2, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowLeft, BadgeCheck, CheckCircle2, Loader2, X } from "lucide-react";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
 import { springs } from "@/components/motion";
@@ -11,6 +11,7 @@ import { formatUsd, parseUsdToCents } from "@/lib/format";
 import { MAX_BULK_RECIPIENTS, MAX_TIP_CENTS } from "@/lib/fees";
 import { useAuthedFetch } from "@/lib/hooks";
 import type { RecipientCheck } from "@/app/api/bot-check/route";
+import { SKIP_BY_DEFAULT } from "@/lib/bot-check";
 
 type Platform = "youtube" | "kick";
 type Step = "who" | "amount" | "review" | "sending";
@@ -33,9 +34,10 @@ function parseHandles(text: string): string[] {
  * confirm, see lib/money-client.ts), so each result shows as it happens and
  * one bad username doesn't block the rest.
  *
- * Before sending, the recipients are checked for likely bots (PRD 7.4 / 8.5,
- * /api/bot-check). Flagged people are skipped by default, with the reason
- * shown, and the creator can include any of them.
+ * Before sending, the recipients are checked (PRD 7.4 / 8.5, /api/bot-check):
+ * people who aren't verified viewers, or look like part of a bot swarm, are
+ * skipped by default with the reason shown, and the creator can include any
+ * of them. People not on dripp yet are included; their tip waits for them.
  */
 export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const sendTip = useSendTip();
@@ -88,7 +90,7 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
         if (cancelled) return;
         const map = new Map(list.map((r) => [r.handle, r]));
         setChecks({ key: checkKey, results: map });
-        setSkipped(new Set(list.filter((r) => r.verdict === "suspicious").map((r) => r.handle)));
+        setSkipped(new Set(list.filter((r) => SKIP_BY_DEFAULT.includes(r.verdict)).map((r) => r.handle)));
       } catch {
         if (!cancelled) setCheckFailed(true);
       } finally {
@@ -104,9 +106,11 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
 
   const checking = step === "review" && checks?.key !== checkKey && !checkFailed;
   const included = handles.filter((h) => !skipped.has(h));
-  const flaggedCount = checks?.key === checkKey
-    ? handles.filter((h) => checks.results.get(h)?.verdict === "suspicious").length
-    : 0;
+  const checked = checks?.key === checkKey ? checks.results : null;
+  const countOf = (v: RecipientCheck["verdict"]) => handles.filter((h) => checked?.get(h)?.verdict === v).length;
+  const suspiciousCount = countOf("suspicious");
+  const unverifiedCount = countOf("unverified");
+  const flaggedCount = suspiciousCount + unverifiedCount;
   const toggleSkip = (h: string) =>
     setSkipped((cur) => {
       const next = new Set(cur);
@@ -331,22 +335,30 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
                   </>
                 ) : flaggedCount ? (
                   <>
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-negative" aria-hidden />
-                    {flaggedCount} {flaggedCount === 1 ? "looks" : "look"} like {flaggedCount === 1 ? "a bot" : "bots"}{" "}
-                    and {flaggedCount === 1 ? "is" : "are"} skipped. Tap Include to send to them anyway.
+                    <AlertTriangle
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${suspiciousCount ? "text-negative" : "text-muted"}`}
+                      aria-hidden
+                    />
+                    {[
+                      unverifiedCount ? `${unverifiedCount} not verified` : null,
+                      suspiciousCount ? `${suspiciousCount} ${suspiciousCount === 1 ? "looks" : "look"} suspicious` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                    , so they&apos;re skipped. Tap Include to send anyway.
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" aria-hidden /> No likely bots
-                    found.
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" aria-hidden /> Everyone here is
+                    verified or not on dripp yet.
                   </>
                 )}
               </p>
 
               <ul className="max-h-64 overflow-y-auto rounded-card border border-text/10">
                 {handles.map((h) => {
-                  const check = checks?.key === checkKey ? checks.results.get(h) : undefined;
-                  const flagged = check?.verdict === "suspicious";
+                  const check = checked?.get(h);
+                  const flagged = !!check && SKIP_BY_DEFAULT.includes(check.verdict);
                   const skip = skipped.has(h);
                   return (
                     <li
@@ -355,9 +367,19 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
                     >
                       <span className="min-w-0">
                         <span className={`block truncate ${skip ? "text-muted line-through" : ""}`}>@{h}</span>
-                        {check?.verdict === "suspicious" && (
-                          <span className="flex items-center gap-1 text-caption text-negative">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden /> {check.reason}
+                        {check && check.verdict !== "unknown" && (
+                          <span
+                            className={`flex items-center gap-1 text-caption ${
+                              check.verdict === "suspicious" ? "text-negative" : "text-muted"
+                            }`}
+                          >
+                            {check.verdict === "suspicious" && (
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            )}
+                            {check.verdict === "verified" && (
+                              <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-text" aria-hidden />
+                            )}
+                            {check.verdict === "verified" ? "Verified" : check.reason}
                           </span>
                         )}
                       </span>
