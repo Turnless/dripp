@@ -24,9 +24,11 @@ published; this README covers the code.
   finishes escrow claims).
 - The OBS overlay.
 
-The recording logic (`supabase/functions.sql`) and the onchain checks in
-`lib/wallet-server.ts` were also tested against a local Postgres and a local
-EVM node running the real `TipVault.sol`.
+Automated tests: `npm test` (money math, the onchain log checks, the confirm
+route, OAuth state, the lookup cache and rate limiting) and `forge test` in
+`contracts/` (unit tests plus invariant tests: every handle's escrow equals
+its senders' contributions and the vault's balance, and a claimed tip can
+never also be refunded).
 
 **Not built yet** -- see "Deliberately left as TODOs" below.
 
@@ -93,13 +95,17 @@ lib/
   tipvault.ts                 TipVault ABI + handle hash
   money-client.ts             Browser: useSendTip, useBalance, useActivity, unconfirmed-tip retries
   youtube.ts / kick.ts        Single-username platform lookups
-  username-resolve.ts         DB-first, platform-API-fallback resolution logic
+  username-resolve.ts         DB-first, then cached platform lookup (handle_lookups)
+  rate-limit.ts               Per-user / per-IP API limits, counted in Postgres
   oauth.ts                    Signed-state helper for platform linking
 
 contracts/
   src/TipVault.sol            Pending-tip escrow contract (claim by owner, refund after 30 days)
-  test/TipVault.t.sol         Foundry test suite
+  test/TipVault.t.sol         Foundry unit tests
+  test/TipVault.invariant.t.sol  Foundry invariant + fuzz tests
   script/Deploy.s.sol         Deployment script
+
+tests/                        Vitest unit tests (npm test)
 
 supabase/
   schema.sql                  Full database schema, for a new project
@@ -128,7 +134,10 @@ supabase/
    `TIPVAULT_CONTRACT_ADDRESS`. The owner address needs a little MON -- it
    pays gas for escrow claims.
 6. Set up gas sponsorship and the background job (below).
-7. `npm run dev` and open `http://localhost:3000`.
+7. `npm test`, then `npm run dev` and open `http://localhost:3000`.
+
+After pulling changes that touch `supabase/`, run `migrate.sql` then
+`functions.sql` again on your existing database (both are safe to re-run).
 
 ## Gas-free transfers setup
 
@@ -226,7 +235,12 @@ NextAuth on top (see the comment at the top of `lib/oauth.ts`).
   hasn't linked a channel can't receive tips yet
 - The bot/real breakdown dashboard (`bot_scores` table exists, nothing
   populates it yet)
-- Rate limiting on the API routes
 - Row Level Security *policies* in Supabase -- RLS itself is enabled on
-  every table (deny-all for the public anon key); add narrow policies only if
-  the browser ever needs direct table access
+  every table and the browser never talks to Supabase directly (only the
+  server, with the service-role key); add narrow policies only if that
+  changes
+- Hardening the escrow contract (two-step ownership, a claim-only role, a
+  claim delay/cap) -- needs a redeploy
+- Keying links and escrow on the platform's channel ID instead of the handle
+  (a renamed or reassigned handle can currently route tips to the wrong person)
+- Moving the TipVault owner key to a managed signer
