@@ -5,6 +5,7 @@ import { useLinkAccount } from "@privy-io/react-auth";
 import { BadgeCheck, ShieldCheck, Smartphone } from "lucide-react";
 import { useAccount, type Verification } from "@/components/account";
 import { Button } from "@/components/ui/Button";
+import { readError, useAuthedFetch } from "@/lib/hooks";
 import { GlassCard } from "@/components/ui/GlassCard";
 
 /**
@@ -20,14 +21,21 @@ const VIA_TEXT: Record<NonNullable<Verification["via"]>, string> = {
   tipped: "You've tipped with your own money.",
 };
 
-/** Opens Privy's phone verification, then asks the server to re-check. */
+/**
+ * Phone verification: asks the server first (each code costs money, so
+ * attempts are strictly limited -- /api/me/verify/start), then opens Privy's
+ * popup, which sends the code by SMS or WhatsApp, then asks the server to
+ * re-check.
+ */
 export function useVerifyPhone() {
   const { refreshVerification } = useAccount();
+  const authedFetch = useAuthedFetch();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { linkPhone } = useLinkAccount({
-    onSuccess: async (_user, method) => {
-      if (method !== "sms") return;
+    onSuccess: async (_user, _method, linkedAccount) => {
+      // Any verified phone counts, whether the code came by SMS or WhatsApp.
+      if (linkedAccount.type !== "phone") return;
       try {
         await refreshVerification();
       } catch (e) {
@@ -42,9 +50,27 @@ export function useVerifyPhone() {
       if (code !== "exited_link_flow") setError("We couldn't verify that number. Please try again.");
     },
   });
-  const start = () => {
+  const start = async () => {
     setError(null);
     setBusy(true);
+    try {
+      const res = await authedFetch("/api/me/verify/start", { method: "POST" });
+      if (res.status === 409) {
+        // Already verified (e.g. on another device): just refresh.
+        await refreshVerification();
+        setBusy(false);
+        return;
+      }
+      if (!res.ok) {
+        setError(await readError(res));
+        setBusy(false);
+        return;
+      }
+    } catch {
+      setError("We couldn't reach dripp. Check your connection and try again.");
+      setBusy(false);
+      return;
+    }
     linkPhone();
   };
   return { start, busy, error };

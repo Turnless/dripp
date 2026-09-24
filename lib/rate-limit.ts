@@ -76,3 +76,59 @@ export async function rateLimit(
   }
   return null;
 }
+
+/**
+ * Phone verification sends a paid message (SMS / WhatsApp) that dripp pays
+ * for, so it's limited strictly -- and, unlike rateLimit(), fails CLOSED:
+ * if the limiter can't be reached, no code is sent.
+ *   - per person: 1 attempt every 5 minutes, and 3 a day
+ *   - per network (IP): 10 a day
+ *   - everyone together: PHONE_VERIFY_DAILY_CAP a day (default 100)
+ * Returns a response to send back when refused, or null to carry on.
+ *
+ * This gates the app's "Verify phone" button. Privy sends the code itself,
+ * so also set its own limits / allowed countries in the Privy dashboard.
+ */
+export const PHONE_VERIFY_LIMITS = {
+  perUserShort: { limit: 1, windowSeconds: 5 * 60 },
+  perUserDaily: 3,
+  perIpDaily: 10,
+  defaultGlobalDaily: 100,
+};
+
+export async function phoneVerifyLimit(req: Request, userId: string): Promise<NextResponse | null> {
+  const db = supabaseServer();
+  const refuse = (error: string, retryAfter: number, status = 429) =>
+    NextResponse.json({ error }, { status, headers: { "Retry-After": String(retryAfter) } });
+
+  const short = await db.rpc("hit_rate_limit", {
+    p_keys: [`phoneVerify5m:u:${userId}`],
+    p_limits: [PHONE_VERIFY_LIMITS.perUserShort.limit],
+    p_window_seconds: PHONE_VERIFY_LIMITS.perUserShort.windowSeconds,
+  });
+  if (short.error) {
+    console.error("phone verify limiter failed -- refusing", short.error);
+    return refuse("Verification is unavailable right now. Please try again later.", 60, 503);
+  }
+  if (short.data === false) {
+    return refuse("Please wait a few minutes before asking for another code.", PHONE_VERIFY_LIMITS.perUserShort.windowSeconds);
+  }
+
+  const globalCap = Number(process.env.PHONE_VERIFY_DAILY_CAP) || PHONE_VERIFY_LIMITS.defaultGlobalDaily;
+  const keys = [`phoneVerifyDay:u:${userId}`, "phoneVerifyDay:all"];
+  const limits = [PHONE_VERIFY_LIMITS.perUserDaily, globalCap];
+  const ip = clientIp(req);
+  if (ip) {
+    keys.push(`phoneVerifyDay:ip:${ip}`);
+    limits.push(PHONE_VERIFY_LIMITS.perIpDaily);
+  }
+  const daily = await db.rpc("hit_rate_limit", { p_keys: keys, p_limits: limits, p_window_seconds: 24 * 60 * 60 });
+  if (daily.error) {
+    console.error("phone verify limiter failed -- refusing", daily.error);
+    return refuse("Verification is unavailable right now. Please try again later.", 60, 503);
+  }
+  if (daily.data === false) {
+    return refuse("You've reached today's limit for verification codes. Please try again tomorrow.", 24 * 60 * 60);
+  }
+  return null;
+}

@@ -174,14 +174,29 @@ After pulling changes that touch `supabase/`, run `migrate.sql` then
 ## Viewer verification (phone)
 
 Viewers who don't pass the YouTube check when they link a channel are asked
-to verify a phone number through Privy's own popup. Turn it on once:
+to verify a phone number through Privy's own popup. dripp pays for every
+code, so attempts are strictly limited before the popup opens
+(`/api/me/verify/start`, `phoneVerifyLimit` in `lib/rate-limit.ts`): 1 per 5
+minutes and 3 a day per person, 10 a day per network, and
+`PHONE_VERIFY_DAILY_CAP` (default 100) a day in total. If the limiter can't
+be reached, no code is sent.
+
+Turn it on once:
 
 1. Privy dashboard -> your app -> **Login methods**: enable **SMS**.
    Sign-in stays Google-only, because `app/providers.tsx` sets
    `loginMethods: ["google"]`; SMS is only used to *link* a phone.
-2. Check your Privy plan's SMS limits and the countries you need.
+2. In the same place, restrict the allowed countries to the ones you serve,
+   turn on any fraud / rate-limit protection Privy offers, and set a billing
+   alert. dripp's limits gate the app's button; Privy sends the code itself.
 3. Test it: Profile -> "One more step" -> **Verify phone**. The card should
    switch to **Verified**.
+
+Privy's SMS only reaches the US and Canada. WhatsApp delivery is a Privy
+dashboard option in `@privy-io/react-auth` 2.x/3.x; this app is on 1.x, so
+WhatsApp needs that upgrade (it touches sign-in and the smart wallets, so
+test tipping end to end after it). The app already accepts a phone verified
+either way.
 
 ## Gas-free transfers setup
 
