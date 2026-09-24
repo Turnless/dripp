@@ -222,8 +222,9 @@ async function sendClaimWithPrivyWallet(
   hash: `0x${string}`,
   recipient: `0x${string}`
 ): Promise<Hash> {
-  // The wallet's authorization key, if it has an owner (recommended): base64
-  // PKCS8 private key, as shown when the key is created in the Privy dashboard.
+  // The wallet's authorization key, if it has an owner (recommended): the
+  // private key exactly as the Privy dashboard shows it when the key is
+  // created, "wallet-auth:" prefix included (the SDK strips it).
   const authKey = process.env.PRIVY_CLAIM_AUTHORIZATION_KEY;
   const res = await privy()
     .wallets()
