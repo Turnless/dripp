@@ -174,8 +174,15 @@ After pulling changes that touch `supabase/`, run `migrate.sql` then
 
 ## Viewer verification (phone)
 
-Viewers who don't pass the YouTube check when they link a channel are asked
-to verify a phone number. dripp sends the code itself through **Twilio
+**Status: built, not activated yet.** Twilio will be set up later (a paid
+account is needed to send codes to anyone). Until the Twilio settings below
+are in Vercel, the app hides every phone option and tells viewers the
+other ways to get verified: create a YouTube channel if they don't have one
+(free, nothing to post) and link it, or send a tip of $1 or more. Adding the
+settings and redeploying turns the phone option on -- no code change.
+
+Viewers who don't pass the YouTube check when they link a channel can then
+verify a phone number. dripp sends the code itself through **Twilio
 Verify**, by **WhatsApp or SMS** (the viewer picks), so it works in the
 countries Twilio covers. Privy's phone login isn't used.
 
@@ -189,7 +196,9 @@ be reached, nothing is sent. Code guesses are limited too (and Twilio stops
 a code after 5 wrong tries).
 
 Numbers are never stored: only a keyed hash (`users.phone_hash`, unique),
-which is what stops one phone verifying two accounts.
+which is what stops one phone verifying two accounts. Numbers are accepted
+in international form; a local leading 0 kept after the country code
+(`+234 0816...`) is dropped automatically (not for Italy, +39).
 
 Set it up once:
 
@@ -200,6 +209,8 @@ Set it up once:
 2. In the console, restrict **Geo permissions** to the countries you serve
    and turn on **Fraud Guard** (SMS pumping protection), then set a usage
    alert / spending limit under billing.
+   On a trial account, codes only reach numbers added under Phone Numbers
+   -> Verified Caller IDs; sending to anyone needs an upgraded account.
 3. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID`
    and `PHONE_HASH_SECRET` (and optionally `PHONE_VERIFY_DAILY_CAP`) in
    Vercel -- server-only -- and redeploy.

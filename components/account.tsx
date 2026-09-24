@@ -23,6 +23,8 @@ export type Account = {
   profileVisibility: ProfileVisibility;
   /** Viewer verification -- needed to receive group rewards from streamers. */
   verification: Verification;
+  /** Whether phone verification (Twilio) is set up on the server yet. */
+  phoneVerifyAvailable: boolean;
   /** Updates it after the server confirmed a change (phone verified). */
   setVerification: (v: Verification) => void;
   /** Tester-only stand-in for the offramp: withdraw to a wallet address. */
@@ -40,6 +42,7 @@ export const AccountContext = createContext<Account>({
   profileVisibility: { received: true, sent: true, tipCounts: true, subscribers: true },
   canWithdrawToAddress: false,
   verification: { verified: false, via: null },
+  phoneVerifyAvailable: false,
   setVerification: () => {},
   setMode: async () => {},
   setProfileVisibility: async () => {},

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BadgeCheck, MessageCircle, ShieldCheck, Smartphone } from "lucide-react";
+import { ArrowUpRight, BadgeCheck, MessageCircle, Play, ShieldCheck, Smartphone } from "lucide-react";
 import { useAccount, type Verification } from "@/components/account";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Sheet } from "@/components/ui/Sheet";
 import { readError, useAuthedFetch } from "@/lib/hooks";
+import { useLinkYoutube, type LinkPage } from "@/components/LinkChannel";
 
 /**
  * Viewer verification, as the viewer sees it: only the outcome, never the
@@ -242,9 +243,26 @@ export function VerifyPhoneButton({ label = "Verify phone" }: { label?: string }
   );
 }
 
-/** Profile card: verified state, or the one step left. */
+function LinkYoutubeButton({ page }: { page: LinkPage }) {
+  const [error, setError] = useState<string | null>(null);
+  const { linkYoutube, linking } = useLinkYoutube(page, setError);
+  return (
+    <>
+      <Button onClick={linkYoutube} loading={linking} className="self-start">
+        <Play className="h-5 w-5" aria-hidden /> Link YouTube
+      </Button>
+      {error && (
+        <p className="w-full text-caption text-negative" role="alert">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Profile card: verified state, or how to get verified. */
 export function VerificationCard() {
-  const { verification, links } = useAccount();
+  const { verification, links, mode, phoneVerifyAvailable } = useAccount();
 
   if (verification.verified) {
     return (
@@ -264,6 +282,11 @@ export function VerificationCard() {
   }
 
   const hasChannel = links.some((l) => l.platform === "youtube");
+  const page: LinkPage = mode === "creator" ? "creator" : "profile";
+  const otherWays = phoneVerifyAvailable
+    ? "You can also verify your phone, or send a tip of $1 or more."
+    : "Sending a tip of $1 or more also verifies you.";
+
   return (
     <GlassCard className="flex flex-col gap-4 p-5">
       <div className="flex items-start gap-4">
@@ -271,15 +294,46 @@ export function VerificationCard() {
           <ShieldCheck className="h-6 w-6" strokeWidth={2} aria-hidden />
         </span>
         <div className="min-w-0">
-          <p className="font-bold">One more step</p>
+          <p className="font-bold">{hasChannel ? "One more step" : "Get verified"}</p>
           <p className="text-caption text-muted">
-            Verify your phone by WhatsApp or text so streamers can include you when they reward their
-            viewers. Tipping works without it.
-            {!hasChannel && " Linking your YouTube account can verify you too."}
+            {hasChannel
+              ? `Your YouTube account couldn't verify you yet. ${otherWays}`
+              : "Link your YouTube account so streamers can include you when they reward their viewers. Tipping works either way."}
           </p>
         </div>
       </div>
-      <VerifyPhoneButton />
+
+      {!hasChannel && (
+        <ol className="flex flex-col gap-3">
+          <li className="flex items-start gap-3">
+            <span className="num grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-caption font-extrabold">1</span>
+            <div className="flex min-w-0 flex-col gap-2">
+              <p className="text-[0.9375rem]">
+                <span className="font-bold">No YouTube channel yet? Create one.</span>{" "}
+                <span className="text-muted">It&apos;s free, and you don&apos;t have to post anything.</span>
+              </p>
+              <a
+                href="https://www.youtube.com/create_channel"
+                target="_blank"
+                rel="noreferrer"
+                className="pressable inline-flex h-10 items-center gap-1.5 self-start rounded-full px-4 text-[0.9375rem] font-semibold text-text ring-[1.5px] ring-inset ring-text hover:bg-text/[0.06]"
+              >
+                Create a YouTube channel <ArrowUpRight className="h-4 w-4" aria-hidden />
+              </a>
+            </div>
+          </li>
+          <li className="flex items-start gap-3">
+            <span className="num grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-caption font-extrabold">2</span>
+            <div className="flex min-w-0 flex-col gap-2">
+              <p className="text-[0.9375rem] font-bold">Link it here.</p>
+              <LinkYoutubeButton page={page} />
+            </div>
+          </li>
+        </ol>
+      )}
+
+      {!hasChannel && <p className="text-caption text-muted">{otherWays}</p>}
+      {phoneVerifyAvailable && <VerifyPhoneButton label={hasChannel ? "Verify phone" : "Or verify your phone"} />}
     </GlassCard>
   );
 }

@@ -69,6 +69,15 @@ describe("phone numbers", () => {
     expect(normalizePhone("0044 (7700) 900123")).toBe("+447700900123");
     expect(normalizePhone("08012345678")).toBeNull(); // no country code
     expect(normalizePhone("+0 123 4567 89")).toBeNull();
+  });
+
+  it("drops a local leading 0 kept after the country code", () => {
+    expect(normalizePhone("+234 0816 034 3667")).toBe("+2348160343667");
+    expect(normalizePhone("+23408160343667")).toBe("+2348160343667");
+    expect(normalizePhone("+44 07700 900123")).toBe("+447700900123");
+    expect(normalizePhone("+1 0555 123 4567")).toBe("+15551234567");
+    // Italy keeps it: landline numbers start with 0.
+    expect(normalizePhone("+39 06 1234 5678")).toBe("+390612345678");
     expect(normalizePhone("hello")).toBeNull();
   });
 

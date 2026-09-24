@@ -5,6 +5,7 @@ import { supabaseServer } from "@/lib/supabase";
 import { mayWithdrawToAddress } from "@/lib/withdraw-access";
 import { VisibilityPatchSchema, visibilityColumns, visibilityFromRow } from "@/lib/profile-visibility";
 import { verificationFor, type Verification } from "@/lib/viewer-verification";
+import { phoneVerifyConfigured } from "@/lib/phone-verify";
 import type { LinkedAccount } from "@privy-io/node";
 
 type LinkedAccountGoogleOAuth = Extract<LinkedAccount, { type: "google_oauth" }>;
@@ -105,6 +106,8 @@ export async function POST(req: NextRequest) {
     avatarUrl: links?.find((l) => l.avatar_url)?.avatar_url ?? null,
     profileVisibility: visibilityFromRow(user),
     verification,
+    // Off until the Twilio settings are added; the app then hides the phone option.
+    phoneVerifyAvailable: phoneVerifyConfigured(),
     canWithdrawToAddress: mayWithdrawToAddress(google.email),
   });
 }

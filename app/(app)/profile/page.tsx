@@ -59,7 +59,7 @@ export default function ProfilePage() {
         <StaggerItem>
           <ChannelCard
             page="profile"
-            blurb="Let people tip you by your YouTube handle, and collect any tips sent to it before you joined."
+            blurb="Let people tip you by your YouTube handle, collect any tips sent to it before you joined, and get verified. You need a YouTube channel first; creating one on YouTube is free."
           />
         </StaggerItem>
       )}

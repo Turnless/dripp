@@ -73,7 +73,7 @@ export default function CreatorPage() {
       <StaggerItem>
         <ChannelCard
           page="creator"
-          blurb="Get a verified badge and collect any tips people sent you before you joined."
+          blurb="Get a verified badge and collect any tips people sent you before you joined. You need a YouTube channel first; creating one on YouTube is free."
           footer={
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">

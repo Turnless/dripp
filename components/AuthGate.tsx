@@ -19,6 +19,7 @@ type Me = {
   avatarUrl: string | null;
   profileVisibility: ProfileVisibility;
   verification?: Verification;
+  phoneVerifyAvailable?: boolean;
   canWithdrawToAddress: boolean;
 };
 type SetupState = { status: "loading" } | { status: "error" } | { status: "ready"; me: Me };
@@ -150,6 +151,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         profileVisibility: state.me.profileVisibility,
         canWithdrawToAddress: !!state.me.canWithdrawToAddress,
         verification: state.me.verification ?? { verified: false, via: null },
+        phoneVerifyAvailable: !!state.me.phoneVerifyAvailable,
         setVerification,
         setMode,
         setProfileVisibility,

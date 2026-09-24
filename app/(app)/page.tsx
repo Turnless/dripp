@@ -143,7 +143,7 @@ function ago(at: string): string {
  * repeat of your last tip.
  */
 function Spotlight({ items, week }: { items: ActivityItem[] | null; week: WeekSummary | null }) {
-  const { mode, links, verification } = useAccount();
+  const { mode, links, verification, phoneVerifyAvailable } = useAccount();
   const { openSend, openSendTo } = useSend();
   const verifyPhone = useVerifyPhone();
   if (items === null) return <Skeleton className="h-[76px] w-full rounded-card" />;
@@ -182,14 +182,16 @@ function Spotlight({ items, week }: { items: ActivityItem[] | null; week: WeekSu
       <SpotlightCard
         href="/profile"
         icon={ArrowRight}
-        title="Get tipped too"
-        body="Link your YouTube channel so people can tip you."
+        title="Get tipped and verified"
+        body="Link your YouTube channel so people can tip you. No channel yet? Create one on YouTube first."
       />
     );
   }
 
   if (!verification.verified) {
-    return (
+    // Phone verification only once it's set up (Twilio); otherwise Profile
+    // explains the other ways (YouTube, or a $1+ tip).
+    return phoneVerifyAvailable ? (
       <>
         <SpotlightCard
           onClick={verifyPhone.start}
@@ -199,6 +201,13 @@ function Spotlight({ items, week }: { items: ActivityItem[] | null; week: WeekSu
         />
         {verifyPhone.sheet}
       </>
+    ) : (
+      <SpotlightCard
+        href="/profile"
+        icon={ShieldCheck}
+        title="Get verified to receive rewards"
+        body="Send a tip of $1 or more, or see other ways on your profile."
+      />
     );
   }
 

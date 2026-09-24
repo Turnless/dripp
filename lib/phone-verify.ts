@@ -16,15 +16,35 @@ import { createHmac } from "crypto";
 
 export type Channel = "whatsapp" | "sms";
 
+// Two-digit country codes (ITU E.164). Codes are prefix-free: 1 and 7 are
+// one digit, these are two, and every other code is three.
+const TWO_DIGIT_CODES = new Set(
+  "20 27 30 31 32 33 34 36 39 40 41 43 44 45 46 47 48 49 51 52 53 54 55 56 57 58 60 61 62 63 64 65 66 81 82 84 86 90 91 92 93 94 95 98".split(" ")
+);
+
+function countryCodeLength(digits: string): number {
+  if (digits[0] === "1" || digits[0] === "7") return 1;
+  return TWO_DIGIT_CODES.has(digits.slice(0, 2)) ? 2 : 3;
+}
+
 /**
  * A phone number in international (E.164) form: "+", a country code, and up
  * to 15 digits. Spaces, dashes, dots and brackets are removed; a leading
- * "00" is read as "+". Returns null if it isn't a plausible number.
+ * "00" is read as "+". People often keep their local leading 0 after the
+ * country code (+234 0816... instead of +234 816...), so one 0 right after
+ * the country code is dropped -- except for Italy (+39), where it belongs
+ * to landline numbers. Returns null if it isn't a plausible number.
  */
 export function normalizePhone(raw: string): string | null {
   let s = raw.trim().replace(/[\s().-]/g, "");
   if (s.startsWith("00")) s = `+${s.slice(2)}`;
-  return /^\+[1-9]\d{7,14}$/.test(s) ? s : null;
+  if (!/^\+[1-9]\d+$/.test(s)) return null;
+  const digits = s.slice(1);
+  const cc = digits.slice(0, countryCodeLength(digits));
+  let national = digits.slice(cc.length);
+  if (national.startsWith("0") && cc !== "39") national = national.slice(1);
+  const out = `+${cc}${national}`;
+  return /^\+[1-9]\d{7,14}$/.test(out) ? out : null;
 }
 
 /** Keyed hash of a normalized number, for the one-phone-one-account rule. */
