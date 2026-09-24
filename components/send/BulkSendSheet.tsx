@@ -13,7 +13,7 @@ import { useAuthedFetch } from "@/lib/hooks";
 import type { RecipientCheck } from "@/app/api/bot-check/route";
 import { SKIP_BY_DEFAULT } from "@/lib/bot-check";
 
-type Platform = "youtube" | "kick";
+type Platform = "youtube" | "kick" | "dripp";
 type Step = "who" | "amount" | "review" | "sending";
 type SplitMode = "split" | "each";
 type Result = { handle: string; status: "waiting" | "sending" | "sent" | "held" | "failed"; error?: string };
@@ -90,7 +90,11 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
         if (cancelled) return;
         const map = new Map(list.map((r) => [r.handle, r]));
         setChecks({ key: checkKey, results: map });
-        setSkipped(new Set(list.filter((r) => SKIP_BY_DEFAULT.includes(r.verdict)).map((r) => r.handle)));
+        // A dripp username nobody has can't receive anything (tips to a YouTube or
+        // Kick handle can wait in escrow), so it starts skipped too.
+        const skip = (r: RecipientCheck) =>
+          SKIP_BY_DEFAULT.includes(r.verdict) || (platform === "dripp" && r.verdict === "unknown");
+        setSkipped(new Set(list.filter(skip).map((r) => r.handle)));
       } catch {
         if (!cancelled) setCheckFailed(true);
       } finally {
@@ -173,8 +177,8 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
         >
           {step === "who" && (
             <>
-              <div role="radiogroup" aria-label="Platform" className="grid grid-cols-2 gap-1 rounded-full bg-text/[0.05] p-1">
-                {(["youtube", "kick"] as const).map((p) => (
+              <div role="radiogroup" aria-label="Platform" className="grid grid-cols-3 gap-1 rounded-full bg-text/[0.05] p-1">
+                {(["youtube", "kick", "dripp"] as const).map((p) => (
                   <button
                     key={p}
                     role="radio"
@@ -184,7 +188,7 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
                       platform === p ? "bg-solid text-text shadow-[0_1px_3px_rgba(15,14,26,0.1)]" : "text-muted"
                     }`}
                   >
-                    {p === "youtube" ? "YouTube" : "Kick"}
+                    {p === "youtube" ? "YouTube" : p === "kick" ? "Kick" : "dripp"}
                   </button>
                 ))}
               </div>

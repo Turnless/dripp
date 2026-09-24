@@ -1,4 +1,4 @@
-import { ArrowDownToLine } from "lucide-react";
+import { ArrowDownToLine, Plus } from "lucide-react";
 import { formatUsd } from "@/lib/format";
 import type { ActivityItem } from "@/lib/money-client";
 
@@ -17,27 +17,32 @@ function relativeTime(iso: string): string {
 /** One history entry. Shows handles and dollars only -- never addresses or hashes. */
 export function ActivityRow({ item }: { item: ActivityItem }) {
   const withdrawal = item.direction === "withdrawn";
-  const incoming = item.direction === "received";
+  const added = item.direction === "added";
+  const incoming = item.direction === "received" || added;
   const waiting = item.status === "waiting";
   const returned = item.status === "returned";
-  const title = withdrawal ? "Withdrawal" : (item.counterparty ?? "A dripp user");
+  const title = withdrawal ? "Withdrawal" : added ? "Added money" : (item.counterparty ?? "A dripp user");
   const when = relativeTime(item.at);
 
-  const detail = withdrawal
-    ? item.feeCents
-      ? `Fee ${formatUsd(item.feeCents)} · ${when}`
-      : when
-    : waiting
-      ? `${formatUsd(item.cents)} · Waiting for them to join`
-      : returned
-        ? `${formatUsd(item.cents)} · Not collected in 30 days`
-        : item.status === "collected"
-          ? `${incoming ? "Collected when you joined" : "Collected"} · ${when}`
-          : `${incoming ? "Tipped you" : "You tipped"} · ${when}`;
+  const detail = added
+    ? `From your wallet · ${when}`
+    : withdrawal
+      ? item.feeCents
+        ? `Fee ${formatUsd(item.feeCents)} · ${when}`
+        : when
+      : waiting
+        ? `${formatUsd(item.cents)} · Waiting for them to join`
+        : returned
+          ? `${formatUsd(item.cents)} · Not collected in 30 days`
+          : item.status === "collected"
+            ? `${incoming ? "Collected when you joined" : "Collected"} · ${when}`
+            : `${incoming ? "Tipped you" : "You tipped"} · ${when}`;
 
   const initial = (title.replace(/^@/, "").charAt(0) || "D").toUpperCase();
   const avatarTone = withdrawal
     ? "bg-primary text-on-primary"
+    : added
+      ? "bg-brand text-text"
     : incoming
       ? "bg-positive/10 text-positive"
       : waiting
@@ -47,7 +52,13 @@ export function ActivityRow({ item }: { item: ActivityItem }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3.5">
       <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full font-extrabold ${avatarTone}`}>
-        {withdrawal ? <ArrowDownToLine className="h-5 w-5" strokeWidth={2.2} aria-hidden /> : initial}
+        {withdrawal ? (
+          <ArrowDownToLine className="h-5 w-5" strokeWidth={2.2} aria-hidden />
+        ) : added ? (
+          <Plus className="h-5 w-5" strokeWidth={2.4} aria-hidden />
+        ) : (
+          initial
+        )}
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate font-bold">{title}</p>

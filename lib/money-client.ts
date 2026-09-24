@@ -14,7 +14,7 @@ export const announceMoneyChanged = () => {
   window.dispatchEvent(new Event(MONEY_CHANGED));
 };
 
-type TipArgs = { platform: "youtube" | "kick"; toUsername: string; amountUsd: number };
+type TipArgs = { platform: "youtube" | "kick" | "dripp"; toUsername: string; amountUsd: number };
 type Call = { to: `0x${string}`; data: `0x${string}` };
 type AuthedFetch = ReturnType<typeof useAuthedFetch>;
 

@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { AlertCircle, Check, Info } from "lucide-react";
+import Link from "next/link";
+import { AlertCircle, Check, ChevronRight, Info, ShieldCheck } from "lucide-react";
 import { isAddress } from "viem";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
 import { useAccount } from "@/components/account";
+import { CryptoOptionHint, MercuryoSoonRow } from "@/components/AddMoneySheet";
 import { useWithdraw } from "@/lib/money-client";
 import { formatUsd, parseUsdToCents } from "@/lib/format";
 import { WITHDRAWAL_FEE_PERCENT, withdrawalFee } from "@/lib/fees";
@@ -15,10 +17,10 @@ import { WITHDRAWAL_FEE_PERCENT, withdrawalFee } from "@/lib/fees";
  * Withdraw -- the one place dripp charges a fee (design.md 7). The fee is
  * always shown as a full breakdown before anything is confirmed.
  *
- * Payouts to a bank or card wait on the offramp (Mercuryo -- README
- * "Deliberately left as TODOs"). Until then, accounts allowed by
- * lib/withdraw-access.ts can withdraw to a wallet address instead; for
- * everyone else the final button stays "open soon".
+ * Payouts to a bank or card wait on the offramp (Mercuryo), shown as
+ * "coming soon". With the crypto option on (Profile) AND a verified account,
+ * people can withdraw to a wallet address instead (lib/crypto-access.ts);
+ * otherwise the sheet says what's missing.
  */
 export function WithdrawSheet({
   open,
@@ -29,7 +31,7 @@ export function WithdrawSheet({
   onClose: () => void;
   balanceCents: number;
 }) {
-  const { canWithdrawToAddress } = useAccount();
+  const { canWithdrawToAddress, crypto } = useAccount();
   const withdraw = useWithdraw();
   const [amountText, setAmountText] = useState("");
   const [destination, setDestination] = useState("");
@@ -77,6 +79,30 @@ export function WithdrawSheet({
           }}
           className="flex flex-col gap-6 pt-2"
         >
+          <MercuryoSoonRow title="To card or bank" body="Cash out to your card or bank account." />
+
+          {!crypto.enabled && (
+            <CryptoOptionHint onNavigate={onClose} text="Turn it on in Profile to withdraw to your wallet." />
+          )}
+          {crypto.enabled && !canWithdrawToAddress && (
+            <Link
+              href="/profile"
+              onClick={onClose}
+              className="pressable flex items-center gap-4 rounded-card p-4 ring-1 ring-inset ring-text/10 hover:bg-text/[0.03]"
+            >
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-tint text-text">
+                <ShieldCheck className="h-5 w-5" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold">Verify to withdraw to your wallet</span>
+                <span className="block text-caption text-muted">
+                  Withdrawing to a wallet address needs a verified account. See how on your profile.
+                </span>
+              </span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted" aria-hidden />
+            </Link>
+          )}
+
           <p className="text-center text-caption text-muted">Available {formatUsd(balanceCents)}</p>
 
           <label className="flex items-center justify-center">
@@ -99,7 +125,7 @@ export function WithdrawSheet({
 
           {canWithdrawToAddress && (
             <label className="flex flex-col gap-2">
-              <span className="text-caption text-muted">Send to wallet address (Monad)</span>
+              <span className="text-caption text-muted">Your wallet address (USDC on Monad)</span>
               <input
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
@@ -143,7 +169,7 @@ export function WithdrawSheet({
             <p className="flex items-start gap-2 text-caption text-muted">
               <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               {canWithdrawToAddress
-                ? "Double-check the address: money sent to the wrong one can't be brought back."
+                ? "Double-check the address and that it accepts USDC on Monad: money sent to the wrong one can't be brought back."
                 : "Sending and receiving tips is free. This is the only fee dripp charges, and only when you take money out."}
             </p>
           )}
@@ -154,7 +180,7 @@ export function WithdrawSheet({
             </Button>
           ) : (
             <Button type="button" size="lg" fullWidth disabled>
-              Withdrawals open soon
+              Card and bank withdrawals open soon
             </Button>
           )}
         </form>

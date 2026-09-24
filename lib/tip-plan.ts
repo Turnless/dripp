@@ -9,7 +9,7 @@ import { normalizeHandle, resolveRecipient } from "./username-resolve";
 const MAX_TIP_USD = 1000;
 
 export const TipSchema = z.object({
-  platform: z.enum(["youtube", "kick"]),
+  platform: z.enum(["youtube", "kick", "dripp"]),
   toUsername: z.string().trim().min(1).max(100),
   amountUsd: z
     .number()
@@ -24,7 +24,7 @@ type Call = { to: `0x${string}`; data: `0x${string}` };
 export type TipPlan =
   | {
       kind: "direct";
-      platform: "youtube" | "kick";
+      platform: "youtube" | "kick" | "dripp";
       username: string;
       recipientId: string;
       recipientWallet: `0x${string}`;

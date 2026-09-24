@@ -187,6 +187,45 @@ exception when duplicate_object then null; end $$;
 alter table users add column if not exists phone_hash text;
 create unique index if not exists users_phone_hash_key on users (phone_hash);
 
+-- 4d. dripp usernames ------------------------------------------------------
+alter table users add column if not exists username text;
+alter table users add column if not exists username_changed_at timestamptz;
+create unique index if not exists users_username_key on users (username);
+do $$ begin
+  alter table users add constraint users_username_check check (username ~ '^[a-z0-9_.]{3,20}$');
+exception when duplicate_object then null; end $$;
+
+create table if not exists username_holds (
+  username text primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  held_until timestamptz not null
+);
+
+alter table tip_intents drop constraint if exists tip_intents_platform_check;
+alter table tip_intents add constraint tip_intents_platform_check
+  check (platform in ('youtube', 'kick', 'dripp'));
+
+-- 4e. crypto option + deposits -------------------------------------------
+alter table users add column if not exists crypto_enabled boolean not null default false;
+alter table users add column if not exists crypto_enabled_at timestamptz;
+
+create table if not exists deposits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id),
+  amount numeric(18, 6) not null check (amount > 0),
+  from_address text not null,
+  tx_hash text not null,
+  log_index integer not null,
+  block bigint not null,
+  created_at timestamptz not null default now(),
+  unique (tx_hash, log_index)
+);
+create index if not exists idx_deposits_user on deposits (user_id);
+
+alter table chain_logs drop constraint if exists chain_logs_kind_check;
+alter table chain_logs add constraint chain_logs_kind_check
+  check (kind in ('tip', 'escrow_deposit', 'escrow_refund', 'withdrawal_fee', 'withdrawal_payout', 'deposit'));
+
 -- 5. live tip alerts for the overlay -------------------------------------
 do $$ begin
   alter publication supabase_realtime add table tips;
@@ -205,6 +244,8 @@ alter table escrow_claims enable row level security;
 alter table sync_state enable row level security;
 alter table handle_lookups enable row level security;
 alter table rate_limits enable row level security;
+alter table username_holds enable row level security;
+alter table deposits enable row level security;
 
 -- Note: some columns are NOT NULL in schema.sql but stay nullable here,
 -- because rows created before this migration have no value for them. New

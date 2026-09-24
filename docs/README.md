@@ -24,11 +24,19 @@ README covers the code. The design tokens (the "Coin" palette -- yellow
 
 **Built, confirm on mainnet before relying on it**
 - Returning escrowed tips to the sender after 30 days unclaimed.
-- Withdrawing to a wallet address (the offramp stand-in, only for the
-  accounts in `WITHDRAW_TO_ADDRESS_EMAILS`).
+- dripp usernames: everyone picks one at sign-up (3-20 of `a-z 0-9 _ .`,
+  reserved words blocked), can change it once every 30 days, and the old
+  one is held for 30 days so tips and links still reach them. People can be
+  tipped by it (the "dripp" tab in Send and group tips), and it's their
+  public page, `/u/<username>`; older `/u/<youtube handle>` links still work.
+- The crypto option: Profile → "I use a crypto wallet" (off by default).
+  On, Add money shows the deposit address (text + QR, "USDC on Monad only"),
+  and verified accounts can withdraw to a wallet address with the 1% fee.
+  The recovery job records money added this way so it shows in Activity.
+  Card and bank (Mercuryo) show as "coming soon" in both sheets.
 - The live subscriber count on the Creator page and the public profile page
-  (`/u/<handle>`; the user picks what it shows under Profile → "What people
-  see": total received, total tipped out, tip counts, subscriber count).
+  (the user picks what it shows under Profile → "What people see": total
+  received, total tipped out, tip counts, subscriber count).
 - Bulk sends (the same path as a single tip, once per recipient).
 - The background recovery job (records tips and refunds whose confirmation
   was missed, finishes escrow claims).
@@ -36,8 +44,8 @@ README covers the code. The design tokens (the "Coin" palette -- yellow
 
 Automated tests: `npm test` (money math, the onchain log checks, the confirm
 route, OAuth state, channel-ID resolution, the lookup cache, rate limiting,
-refunds, the one-time mode choice, the public-profile options, who may
-withdraw to an address, and the bot/real rules) and `forge test` in
+refunds, the one-time mode choice, the public-profile options, usernames,
+who may withdraw to an address, deposit detection, and the bot/real rules) and `forge test` in
 `contracts/` (unit tests plus invariant tests: every handle's escrow equals
 its senders' contributions and the vault's balance, and a claimed tip can
 never also be refunded).
@@ -92,24 +100,25 @@ app/                          Next.js App Router
   (app)/                      Signed-in app: Money, Activity, Creator, Profile
   providers.tsx               Privy + SmartWalletsProvider (gas-free sending)
   overlay/[username]/         OBS browser-source page (?platform=youtube|kick)
-  u/[handle]/                 Public profile: whichever totals / subscriber count the user chose to show
+  u/[handle]/                 Public profile by username (or linked YouTube handle): whichever totals the user chose to show
   api/
-    me/                       POST sign-up/sync, PATCH viewer/creator mode or what the public profile shows
+    me/                       POST sign-up/sync; PATCH mode, username, public-profile options or the crypto option
     tip/prepare/              POST -- save a tip intent, return the calls for the smart wallet to send
     tip/confirm/              POST -- verify the tx onchain against the intent, then record the tip
-    withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (to a wallet address, testers only, until Mercuryo)
+    withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (to a wallet address: crypto option on + verified, until Mercuryo)
     creator/stats/            GET -- live subscriber count of the caller's linked channel
     me/verify/start|check/    POST -- send a phone code (WhatsApp/SMS, strictly limited); check it
     creator/tippers/          GET -- 30-day verified / not verified / suspicious breakdown of the caller's tippers
     bot-check/                POST -- verification + swarm check for a reward drop's recipients
     balance/                  GET -- balance in cents
-    activity/                 GET -- history (tips, escrow, withdrawals); ?week=1 adds the last 7 days received
-    username/resolve/         GET -- check if a username exists/is verifiable
+    activity/                 GET -- history (tips, escrow, withdrawals, added money); ?week=1 adds the last 7 days received
+    username/resolve/         GET -- check if a username exists/is verifiable (YouTube, Kick or dripp)
+    username/available/       GET -- is this dripp username free to take
     platform/link/[provider]  POST (Privy token) -- returns the OAuth URL to link YouTube/Kick
     platform/callback/[provider]  GET -- finish OAuth, link the channel, release escrowed tips
     escrow/refunds/           GET -- refundable escrow + the calls; confirm/ POST -- record a refund
     overlay/events/[username] GET (SSE) -- live tip alerts for the overlay
-    cron/reconcile/           GET (CRON_SECRET) -- record tips confirm missed, finish escrow claims
+    cron/reconcile/           GET (CRON_SECRET) -- record tips confirm missed, finish escrow claims, record added money
 
 lib/
   chain.ts                    Monad chain definition + USDC constants (from env)
@@ -119,7 +128,9 @@ lib/
   escrow-refunds.ts           What a sender can take back after 30 days; record refunds
   tip-plan.ts                 Where a tip goes + the exact calls (saved as a tip intent by prepare)
   withdraw-plan.ts            Withdrawal calls: 1% fee to treasury + payout, batched
-  withdraw-access.ts          Who may withdraw to a wallet address (WITHDRAW_TO_ADDRESS_EMAILS)
+  crypto-access.ts            Who may withdraw to a wallet address (crypto option on + verified)
+  deposits.ts                 Which incoming transfers are "Added money"; records them
+  usernames.ts                dripp username rules (format, reserved words, suggestion)
   bot-check.ts                Viewer verification + bot/real rules (pure, tested)
   viewer-verification.ts      YouTube check at link time, recording a verified phone, reading verification
   phone-verify.ts             Twilio Verify (WhatsApp / SMS), number format, keyed phone hash
@@ -128,7 +139,7 @@ lib/
   tipvault.ts                 TipVault ABI + handle hash
   money-client.ts             Browser: useSendTip, useWithdraw, useBalance, useActivity, unconfirmed tip/withdrawal retries
   youtube.ts / kick.ts        Single-username platform lookups; YouTube subscriber count by channel ID
-  username-resolve.ts         Handle -> channel ID (cached platform lookup) -> linked user or escrow
+  username-resolve.ts         Handle -> channel ID (cached platform lookup) -> linked user or escrow; dripp username -> user
   rate-limit.ts               Per-user / per-IP API limits, counted in Postgres
   oauth.ts                    Signed-state helper for platform linking
 
@@ -335,16 +346,19 @@ NextAuth on top (see the comment at the top of `lib/oauth.ts`).
 
 ## Deliberately left as TODOs, not built
 
-- Mercuryo onramp/offramp: Add Money (wallets are funded externally for
-  now) and cash-out to a bank or card. Withdrawing to a wallet address is the
-  stand-in, offered only to the accounts in `WITHDRAW_TO_ADDRESS_EMAILS`.
+- Mercuryo onramp/offramp: adding money and cashing out with a card or
+  bank. Both sheets show it as "coming soon". Until then the crypto option
+  (Profile) covers adding money from a wallet and, for verified accounts,
+  withdrawing to one. When the onramp lands, a card top-up should record the
+  'topup' verification (`recordVerification` in `lib/viewer-verification.ts`).
+- Deposits are only watched for up to 1000 accounts that have turned the
+  crypto option on (`MAX_DEPOSIT_WALLETS` in the reconcile job). Past that,
+  money still arrives (the balance is read onchain) but may not show in
+  Activity; move to an indexer or webhook then.
 - Refunding when the sender never opens the app again: the current
   contract only lets the sender's own wallet call `refund()`, so returns
   happen on their next visit. An owner-triggered refund needs a redeploy.
 - Kick linking (the callback returns "not yet implemented")
-- In-app usernames: only YouTube/Kick handles can be tipped, so someone who
-  hasn't linked a channel can't receive tips yet (anyone can link one --
-  viewers on Profile, creators on the Creator page)
 - More bot signals: funding-source clustering (needs an onchain indexer) and
   "chatted in a dripp creator's live stream" (needs the streamer's live-chat
   permission). Verification and the swarm check are built

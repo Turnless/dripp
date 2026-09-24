@@ -7,6 +7,7 @@ import { ArrowDownToLine, ArrowRight, History, Plus, Send, ShieldCheck, Users, t
 import { useSend } from "@/components/AppShell";
 import { useAccount } from "@/components/account";
 import { WithdrawSheet } from "@/components/WithdrawSheet";
+import { AddMoneySheet } from "@/components/AddMoneySheet";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -21,6 +22,7 @@ import { formatUsd } from "@/lib/format";
 export default function MoneyPage() {
   const { openSend } = useSend();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const reduce = useReducedMotion();
 
   const balance = useBalance();
@@ -30,7 +32,7 @@ export default function MoneyPage() {
 
   const actions = [
     { label: "Send", icon: Send, onClick: openSend, primary: true },
-    { label: "Add money", icon: Plus, disabled: true },
+    { label: "Add money", icon: Plus, onClick: () => setAddOpen(true) },
     { label: "Withdraw", icon: ArrowDownToLine, onClick: () => setWithdrawOpen(true) },
   ];
 
@@ -62,13 +64,11 @@ export default function MoneyPage() {
               <motion.button
                 key={a.label}
                 onClick={a.onClick}
-                disabled={a.disabled}
-                title={a.disabled ? "Coming soon" : undefined}
                 initial={reduce ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ ...springs.default, delay: 0.15 + i * 0.05 }}
-                whileTap={a.disabled ? undefined : { scale: 0.96 }}
-                className={`flex flex-col items-center gap-2 rounded-card px-2 py-4 text-caption font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                whileTap={{ scale: 0.96 }}
+                className={`flex flex-col items-center gap-2 rounded-card px-2 py-4 text-caption font-semibold transition-colors ${
                   a.primary ? "bg-primary text-on-primary shadow-primary hover:bg-primary-hover" : "bg-text/[0.08] hover:bg-text/[0.12]"
                 }`}
               >
@@ -126,6 +126,7 @@ export default function MoneyPage() {
       </StaggerItem>
 
       <WithdrawSheet open={withdrawOpen} onClose={() => setWithdrawOpen(false)} balanceCents={balanceCents} />
+      <AddMoneySheet open={addOpen} onClose={() => setAddOpen(false)} />
     </Stagger>
   );
 }
@@ -216,7 +217,7 @@ function Spotlight({ items, week }: { items: ActivityItem[] | null; week: WeekSu
     const handle = last.counterparty.replace(/^@/, "");
     return (
       <SpotlightCard
-        onClick={() => openSendTo({ platform: "youtube", handle })}
+        onClick={() => openSendTo({ platform: last.counterpartyPlatform ?? "youtube", handle })}
         icon={Send}
         title={`Tip ${last.counterparty} again`}
         body={`Your last tip was ${formatUsd(last.cents)}, ${ago(last.at)}.`}

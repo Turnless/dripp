@@ -461,6 +461,91 @@ as $$
   left join viewer_verifications(array(select sender_id from senders)) v on v.user_id = s.sender_id;
 $$;
 
+-- Records USDC someone sent to their dripp wallet from outside dripp (found
+-- by the reconcile job). Returns: recorded | log_used (that transfer already
+-- backs a tip, withdrawal or deposit).
+create or replace function record_deposit(
+  p_user_id uuid,
+  p_amount numeric,
+  p_from text,
+  p_tx_hash text,
+  p_log_index integer,
+  p_block bigint
+)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_tx text := lower(p_tx_hash);
+begin
+  insert into chain_logs (tx_hash, log_index, kind)
+    values (v_tx, p_log_index, 'deposit')
+    on conflict do nothing;
+  if not found then
+    return 'log_used';
+  end if;
+  insert into deposits (user_id, amount, from_address, tx_hash, log_index, block)
+    values (p_user_id, p_amount, lower(p_from), v_tx, p_log_index, p_block);
+  return 'recorded';
+end;
+$$;
+
+-- Sets a user's dripp username. Returns 'ok', or why not:
+--   invalid  -- not 3-20 of a-z 0-9 _ . (reserved words are checked by the app)
+--   taken    -- someone else has it
+--   held     -- someone changed away from it in the last 30 days
+--   too_soon -- they changed theirs in the last 30 days (the first choice is free)
+-- Changing away from a name holds it for this user for 30 days, so tips to
+-- the old name still reach them and nobody else can take it meanwhile.
+create or replace function set_username(p_user uuid, p_username text)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_current text;
+  v_changed timestamptz;
+begin
+  if p_username is null or p_username !~ '^[a-z0-9_.]{3,20}$' then
+    return 'invalid';
+  end if;
+
+  select username, username_changed_at into v_current, v_changed
+    from users where id = p_user for update;
+  if not found then
+    return 'invalid';
+  end if;
+  if v_current = p_username then
+    return 'ok';
+  end if;
+  if v_current is not null and v_changed > now() - interval '30 days' then
+    return 'too_soon';
+  end if;
+  if exists (select 1 from users where username = p_username and id <> p_user) then
+    return 'taken';
+  end if;
+  if exists (
+    select 1 from username_holds
+    where username = p_username and user_id <> p_user and held_until > now()
+  ) then
+    return 'held';
+  end if;
+
+  delete from username_holds where username = p_username;
+  if v_current is not null then
+    insert into username_holds (username, user_id, held_until)
+      values (v_current, p_user, now() + interval '30 days')
+      on conflict (username) do update
+        set user_id = excluded.user_id, held_until = excluded.held_until;
+  end if;
+  update users set username = p_username, username_changed_at = now() where id = p_user;
+  return 'ok';
+exception when unique_violation then
+  return 'taken';
+end;
+$$;
+
 -- Only the server (service-role key) may call these. Supabase grants new
 -- functions to anon/authenticated by default, and the anon key is public.
 revoke execute on function tx_has_legacy_record(text) from public, anon, authenticated;
@@ -473,6 +558,8 @@ revoke execute on function link_platform_account(uuid, text, text, text, text) f
 revoke execute on function profile_totals(uuid) from public, anon, authenticated;
 revoke execute on function tipper_signals(uuid, timestamptz) from public, anon, authenticated;
 revoke execute on function viewer_verifications(uuid[]) from public, anon, authenticated;
+revoke execute on function set_username(uuid, text) from public, anon, authenticated;
+revoke execute on function record_deposit(uuid, numeric, text, text, integer, bigint) from public, anon, authenticated;
 grant execute on function tx_has_legacy_record(text) to service_role;
 grant execute on function record_tip(uuid, uuid, text, integer[], bigint) to service_role;
 grant execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) to service_role;
@@ -483,3 +570,5 @@ grant execute on function link_platform_account(uuid, text, text, text, text) to
 grant execute on function profile_totals(uuid) to service_role;
 grant execute on function tipper_signals(uuid, timestamptz) to service_role;
 grant execute on function viewer_verifications(uuid[]) to service_role;
+grant execute on function set_username(uuid, text) to service_role;
+grant execute on function record_deposit(uuid, numeric, text, text, integer, bigint) to service_role;

@@ -10,7 +10,7 @@ import { classifiedTippers } from "@/lib/tipper-check";
 import { verificationsFor } from "@/lib/viewer-verification";
 
 const BodySchema = z.object({
-  platform: z.enum(["youtube", "kick"]),
+  platform: z.enum(["youtube", "kick", "dripp"]),
   handles: z.array(z.string().min(1).max(100)).min(1).max(MAX_BULK_RECIPIENTS),
 });
 
@@ -37,6 +37,8 @@ export async function POST(req: NextRequest) {
   }
   const { platform } = parsed.data;
   const handles = Array.from(new Set(parsed.data.handles.map(normalizeHandle)));
+
+  if (platform === "dripp") return checkDrippUsernames(user.id, handles);
 
   // Handle -> channel (cached lookups, one API call per uncached handle).
   const channels = new Map<string, string>();
@@ -74,6 +76,33 @@ export async function POST(req: NextRequest) {
       if (!id) return { handle, verdict: "unknown", reason: "Couldn't find this channel" };
       const userId = owner.get(id);
       if (!userId) return { handle, ...recipientVerdict(false, null, null) };
+      return { handle, ...recipientVerdict(true, verified.get(userId) ?? null, swarm.get(userId) ?? null) };
+    });
+    return NextResponse.json({ results });
+  } catch (err) {
+    console.error("bot check failed", err);
+    return NextResponse.json({ error: "We couldn't check these right now." }, { status: 500 });
+  }
+}
+
+/** The same checks for dripp usernames: username -> user directly. */
+async function checkDrippUsernames(creatorId: string, handles: string[]) {
+  try {
+    const { data: users, error } = await supabaseServer()
+      .from("users")
+      .select("id, username")
+      .in("username", handles);
+    if (error) throw error;
+    const owner = new Map((users ?? []).map((u) => [u.username as string, u.id as string]));
+    const [verified, tippers] = await Promise.all([
+      verificationsFor(Array.from(new Set(owner.values()))),
+      classifiedTippers(creatorId),
+    ]);
+    const swarm = new Map(tippers.filter((t) => t.verdict === "suspicious").map((t) => [t.senderId, t.reason]));
+
+    const results: RecipientCheck[] = handles.map((handle) => {
+      const userId = owner.get(handle);
+      if (!userId) return { handle, verdict: "unknown", reason: "No one on dripp has this username" };
       return { handle, ...recipientVerdict(true, verified.get(userId) ?? null, swarm.get(userId) ?? null) };
     });
     return NextResponse.json({ results });

@@ -8,19 +8,29 @@ import { Button } from "@/components/ui/Button";
 import { CenterScreen, Wordmark } from "@/components/ui/misc";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { Landing } from "@/components/landing/Landing";
-import { AccountContext, type Mode, type PlatformLink, type Verification } from "@/components/account";
+import {
+  AccountContext,
+  type CryptoOption,
+  type Mode,
+  type PlatformLink,
+  type Verification,
+} from "@/components/account";
 import type { ProfileVisibility } from "@/lib/profile-visibility";
 import { springs } from "@/components/motion";
+import { UsernamePicker } from "@/components/UsernamePicker";
 import { readError } from "@/lib/hooks";
 
 type Me = {
   mode: Mode | null;
   links: PlatformLink[];
   avatarUrl: string | null;
+  username: string | null;
+  usernameChangeableAt: string | null;
+  suggestedUsername?: string | null;
   profileVisibility: ProfileVisibility;
   verification?: Verification;
   phoneVerifyAvailable?: boolean;
-  canWithdrawToAddress: boolean;
+  crypto?: CryptoOption;
 };
 type SetupState = { status: "loading" } | { status: "error" } | { status: "ready"; me: Me };
 
@@ -114,6 +124,36 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     [getAccessToken, state, setMe]
   );
 
+  const setUsername = useCallback(
+    async (username: string) => {
+      const token = await getAccessToken();
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ username }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const saved = (await res.json()) as { username: string; usernameChangeableAt: string | null };
+      if (state.status === "ready") setMe({ ...state.me, ...saved });
+    },
+    [getAccessToken, state, setMe]
+  );
+
+  const setCryptoEnabled = useCallback(
+    async (cryptoEnabled: boolean) => {
+      const token = await getAccessToken();
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ cryptoEnabled }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const { crypto } = (await res.json()) as { crypto: CryptoOption };
+      if (state.status === "ready") setMe({ ...state.me, crypto });
+    },
+    [getAccessToken, state, setMe]
+  );
+
   const setVerification = useCallback(
     (verification: Verification) => {
       if (state.status === "ready") setMe({ ...state.me, verification });
@@ -142,15 +182,24 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (state.me.mode === null) return <ModePicker onPick={setMode} />;
 
+  if (!state.me.username) {
+    return <UsernamePicker suggestion={state.me.suggestedUsername ?? null} onSave={setUsername} />;
+  }
+
   return (
     <AccountContext.Provider
       value={{
         mode: state.me.mode,
         links: state.me.links,
         avatarUrl: state.me.avatarUrl,
+        username: state.me.username,
+        usernameChangeableAt: state.me.usernameChangeableAt,
+        setUsername,
         profileVisibility: state.me.profileVisibility,
-        canWithdrawToAddress: !!state.me.canWithdrawToAddress,
         verification: state.me.verification ?? { verified: false, via: null },
+        crypto: state.me.crypto ?? { enabled: false, depositAddress: null },
+        canWithdrawToAddress: !!state.me.crypto?.enabled && !!state.me.verification?.verified,
+        setCryptoEnabled,
         phoneVerifyAvailable: !!state.me.phoneVerifyAvailable,
         setVerification,
         setMode,

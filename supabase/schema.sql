@@ -18,6 +18,11 @@ create table users (
   -- a separate account type -- anyone can tip and be tipped, and Creator Mode
   -- features still require linking a platform. Null = not chosen yet.
   mode text check (mode in ('viewer', 'creator')),
+  -- dripp username (@name): anyone can be tipped by it, no channel needed.
+  -- Chosen at sign-up; set only through set_username (functions.sql), which
+  -- limits changes to one every 30 days and holds the old name for 30 days.
+  username text unique check (username ~ '^[a-z0-9_.]{3,20}$'),
+  username_changed_at timestamptz,
   -- What /u/<handle> shows about this user, each chosen on Profile ("What
   -- people see"). All on by default as a transparency signal.
   show_received boolean not null default true,
@@ -35,7 +40,22 @@ create table users (
   -- PHONE_HASH_SECRET, lib/phone-verify.ts) -- never the number itself.
   -- Unique: one phone can verify only one account.
   phone_hash text unique,
+  -- "I use a crypto wallet" on Profile: shows the deposit address under Add
+  -- money, and (once verified) withdrawing to a wallet address. Off by
+  -- default. crypto_enabled_at is when it was first turned on and is never
+  -- cleared: the reconcile job records deposits to everyone who has had it on.
+  crypto_enabled boolean not null default false,
+  crypto_enabled_at timestamptz,
   created_at timestamptz not null default now()
+);
+
+-- A username someone changed away from stays theirs for 30 days, so nobody
+-- else can take it and receive tips meant for them (tips to it still reach
+-- the previous owner meanwhile).
+create table username_holds (
+  username text primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  held_until timestamptz not null
 );
 
 create table platform_links (
@@ -127,6 +147,23 @@ create table withdrawals (
 
 create index idx_withdrawals_user on withdrawals (user_id);
 
+-- Money someone added by sending USDC to their dripp wallet from outside
+-- dripp (the crypto option under Add money). Found by the reconcile job;
+-- only for display in Activity -- the balance itself is read onchain.
+create table deposits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id),
+  amount numeric(18, 6) not null check (amount > 0),
+  from_address text not null,
+  tx_hash text not null,
+  log_index integer not null,
+  block bigint not null,
+  created_at timestamptz not null default now(),
+  unique (tx_hash, log_index)
+);
+
+create index idx_deposits_user on deposits (user_id);
+
 -- A tip the server has worked out (recipient + amount) and handed to the
 -- browser to send. /api/tip/confirm checks the transaction against THIS row
 -- instead of resolving the recipient again, so a creator linking their
@@ -136,7 +173,8 @@ create table tip_intents (
   sender_id uuid not null references users(id),
   sender_wallet text not null,
   kind text not null check (kind in ('direct', 'escrow')),
-  platform text not null check (platform in ('youtube', 'kick')),
+  -- 'dripp' = tipped by dripp username (always direct, never escrow).
+  platform text not null check (platform in ('youtube', 'kick', 'dripp')),
   platform_username text not null check (platform_username = lower(platform_username)),
   recipient_id uuid references users(id),
   recipient_wallet text,
@@ -155,13 +193,13 @@ create table tip_intents (
 create index idx_tip_intents_sender on tip_intents (sender_id);
 create index idx_tip_intents_open on tip_intents (created_at) where confirmed_at is null;
 
--- Every onchain log that backs a row in tips, pending_tips or withdrawals.
+-- Every onchain log that backs a row in tips, pending_tips, withdrawals or deposits.
 -- The primary key means one transfer can only ever be recorded once, in
 -- one table.
 create table chain_logs (
   tx_hash text not null,
   log_index integer not null,
-  kind text not null check (kind in ('tip', 'escrow_deposit', 'escrow_refund', 'withdrawal_fee', 'withdrawal_payout')),
+  kind text not null check (kind in ('tip', 'escrow_deposit', 'escrow_refund', 'withdrawal_fee', 'withdrawal_payout', 'deposit')),
   created_at timestamptz not null default now(),
   primary key (tx_hash, log_index)
 );
@@ -245,3 +283,5 @@ alter table escrow_claims enable row level security;
 alter table sync_state enable row level security;
 alter table handle_lookups enable row level security;
 alter table rate_limits enable row level security;
+alter table username_holds enable row level security;
+alter table deposits enable row level security;

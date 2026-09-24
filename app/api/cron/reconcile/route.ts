@@ -10,7 +10,10 @@ import {
   escrowRefundsBetween,
   publicClient,
   usdcTransfersFrom,
+  usdcTransfersTo,
 } from "@/lib/wallet-server";
+import { tipVaultAddress } from "@/lib/tipvault";
+import { recordDeposits } from "@/lib/deposits";
 
 /**
  * Background recovery job. Tips are normally recorded by /api/tip/confirm,
@@ -18,8 +21,10 @@ import {
  * and before confirm succeeds. This job finds those payments onchain and
  * records them against their tip intents, records escrow refunds whose
  * confirmation was missed, and finishes escrow claims whose result was never
- * applied. Safe to run as often as you like: recording is
- * idempotent (see record_tip in supabase/functions.sql).
+ * applied. It also records money people added from outside dripp (the
+ * crypto option) so it shows in Activity. Safe to run as often as you like:
+ * recording is idempotent (see record_tip and record_deposit in
+ * supabase/functions.sql).
  *
  * Call with `Authorization: Bearer $CRON_SECRET` -- what Vercel Cron sends --
  * e.g. every minute. It scans forward from where the last run stopped, at
@@ -31,8 +36,10 @@ export const dynamic = "force-dynamic";
 const CURSOR_KEY = "reconcile";
 // Intents older than this are treated as abandoned (never sent).
 const OPEN_INTENT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-// Senders per log query (each becomes an OR'd topic filter).
+// Senders (or recipients) per log query (each becomes an OR'd topic filter).
 const MAX_SENDERS = 100;
+// Wallets watched for deposits: everyone who has turned the crypto option on.
+const MAX_DEPOSIT_WALLETS = 1000;
 
 function envBlocks(name: string, fallback: number): bigint {
   const n = Number(process.env[name]);
@@ -114,6 +121,20 @@ export async function GET(req: NextRequest) {
     MAX_SENDERS
   );
   const hasEscrow = open.some((i) => i.kind === "escrow");
+
+  // Wallets of people who've turned the crypto option on: money arriving
+  // from outside dripp is recorded as "Added money".
+  const { data: cryptoRows, error: cryptoErr } = await db
+    .from("users")
+    .select("id, wallet_address")
+    .not("crypto_enabled_at", "is", null)
+    .order("crypto_enabled_at", { ascending: false })
+    .limit(MAX_DEPOSIT_WALLETS);
+  if (cryptoErr) console.error("reconcile: crypto users read failed", cryptoErr);
+  const depositOwners = new Map((cryptoRows ?? []).map((u) => [(u.wallet_address as string).toLowerCase(), u.id as string]));
+  const depositWallets = Array.from(depositOwners.keys()).map((a) => getAddress(a));
+  const walletChunks: `0x${string}`[][] = [];
+  for (let i = 0; i < depositWallets.length; i += MAX_SENDERS) walletChunks.push(depositWallets.slice(i, i + MAX_SENDERS));
   // Refunds only exist for escrow at least 30 days old; skip the scan if none is.
   let scanRefunds = false;
   try {
@@ -168,9 +189,10 @@ export async function GET(req: NextRequest) {
   }
 
   let recorded = 0;
+  let deposited = 0;
   let scannedTo = start - one;
   try {
-    if (senders.length || hasEscrow || scanRefunds) {
+    if (senders.length || hasEscrow || scanRefunds || walletChunks.length) {
       for (let from = start; from <= end; from += logRange) {
         const to = from + logRange - one < end ? from + logRange - one : end;
         const [transfers, deposits, refunds] = await Promise.all([
@@ -203,6 +225,10 @@ export async function GET(req: NextRequest) {
           if (candidates.length && (await recordLog(candidates, d))) recorded++;
         }
         for (const r of refunds) await recordRefundLog(r);
+        if (walletChunks.length) {
+          const incoming = (await Promise.all(walletChunks.map((w) => usdcTransfersTo(w, from, to)))).flat();
+          deposited += await recordDeposits(incoming, depositOwners, tipVaultAddress());
+        }
         scannedTo = to;
       }
     } else {
@@ -221,5 +247,5 @@ export async function GET(req: NextRequest) {
     if (error) console.error("reconcile: cursor save failed", error);
   }
 
-  return NextResponse.json({ claimsUnsettled, scannedTo: Number(scannedTo), recorded });
+  return NextResponse.json({ claimsUnsettled, scannedTo: Number(scannedTo), recorded, deposited });
 }

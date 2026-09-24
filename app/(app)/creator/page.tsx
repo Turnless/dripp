@@ -45,7 +45,7 @@ function useSubscribers(enabled: boolean) {
 
 /** Creator mode. design.md section 9, screens 9, 10 and 14. */
 export default function CreatorPage() {
-  const { links } = useAccount();
+  const { links, username } = useAccount();
   const week = useRecentWithWeek(5).data?.week ?? null;
   const [bulkOpen, setBulkOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -85,16 +85,16 @@ export default function CreatorPage() {
                 <Stat value={week ? formatUsd(week.cents) : "—"} label="Tips this week" />
                 <Stat value={week ? String(week.supporters) : "—"} label="Supporters this week" />
               </div>
-              {youtube && (
+              {username && (
                 <Link
-                  href={`/u/${youtube.platform_username}`}
+                  href={`/u/${username}`}
                   target="_blank"
                   className="pressable flex items-center justify-between gap-3 rounded-chip bg-text/[0.05] px-4 py-3 hover:bg-text/[0.08]"
                 >
                   <span className="min-w-0">
                     <span className="block text-caption font-bold">Your public page</span>
                     <span className="block truncate text-caption text-muted">
-                      {origin.replace(/^https?:\/\//, "")}/u/{youtube.platform_username}
+                      {origin.replace(/^https?:\/\//, "")}/u/{username}
                     </span>
                   </span>
                   <ArrowUpRight className="h-5 w-5 shrink-0" aria-hidden />
