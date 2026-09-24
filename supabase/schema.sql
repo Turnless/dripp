@@ -18,6 +18,11 @@ create table users (
   -- a separate account type -- anyone can tip and be tipped, and Creator Mode
   -- features still require linking a platform. Null = not chosen yet.
   mode text check (mode in ('viewer', 'creator')),
+  -- dripp username (@name): anyone can be tipped by it, no channel needed.
+  -- Chosen at sign-up; set only through set_username (functions.sql), which
+  -- limits changes to one every 30 days and holds the old name for 30 days.
+  username text unique check (username ~ '^[a-z0-9_.]{3,20}$'),
+  username_changed_at timestamptz,
   -- What /u/<handle> shows about this user, each chosen on Profile ("What
   -- people see"). All on by default as a transparency signal.
   show_received boolean not null default true,
@@ -36,6 +41,15 @@ create table users (
   -- Unique: one phone can verify only one account.
   phone_hash text unique,
   created_at timestamptz not null default now()
+);
+
+-- A username someone changed away from stays theirs for 30 days, so nobody
+-- else can take it and receive tips meant for them (tips to it still reach
+-- the previous owner meanwhile).
+create table username_holds (
+  username text primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  held_until timestamptz not null
 );
 
 create table platform_links (
@@ -136,7 +150,8 @@ create table tip_intents (
   sender_id uuid not null references users(id),
   sender_wallet text not null,
   kind text not null check (kind in ('direct', 'escrow')),
-  platform text not null check (platform in ('youtube', 'kick')),
+  -- 'dripp' = tipped by dripp username (always direct, never escrow).
+  platform text not null check (platform in ('youtube', 'kick', 'dripp')),
   platform_username text not null check (platform_username = lower(platform_username)),
   recipient_id uuid references users(id),
   recipient_wallet text,
@@ -245,3 +260,4 @@ alter table escrow_claims enable row level security;
 alter table sync_state enable row level security;
 alter table handle_lookups enable row level security;
 alter table rate_limits enable row level security;
+alter table username_holds enable row level security;

@@ -19,6 +19,12 @@ export type Account = {
   links: PlatformLink[];
   /** Profile picture from a linked channel, or null (initials are shown). */
   avatarUrl: string | null;
+  /** The dripp username (chosen at sign-up), without the @. */
+  username: string | null;
+  /** When it can next be changed (ISO), or null if it can change now. */
+  usernameChangeableAt: string | null;
+  /** Saves a new username; throws the server's message if it can't. */
+  setUsername: (username: string) => Promise<void>;
   /** What the public profile page (/u/<handle>) shows. */
   profileVisibility: ProfileVisibility;
   /** Viewer verification -- needed to receive group rewards from streamers. */
@@ -39,6 +45,9 @@ export const AccountContext = createContext<Account>({
   mode: null,
   links: [],
   avatarUrl: null,
+  username: null,
+  usernameChangeableAt: null,
+  setUsername: async () => {},
   profileVisibility: { received: true, sent: true, tipCounts: true, subscribers: true },
   canWithdrawToAddress: false,
   verification: { verified: false, via: null },

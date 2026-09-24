@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const username = req.nextUrl.searchParams.get("username")?.trim();
 
   if (
-    (platform !== "youtube" && platform !== "kick") ||
+    (platform !== "youtube" && platform !== "kick" && platform !== "dripp") ||
     !username ||
     username.length > 100
   ) {

@@ -6,6 +6,7 @@ import { mayWithdrawToAddress } from "@/lib/withdraw-access";
 import { VisibilityPatchSchema, visibilityColumns, visibilityFromRow } from "@/lib/profile-visibility";
 import { verificationFor, type Verification } from "@/lib/viewer-verification";
 import { phoneVerifyConfigured } from "@/lib/phone-verify";
+import { SET_USERNAME_ERRORS, USERNAME_CHANGE_DAYS, checkUsername, suggestUsername } from "@/lib/usernames";
 import type { LinkedAccount } from "@privy-io/node";
 
 type LinkedAccountGoogleOAuth = Extract<LinkedAccount, { type: "google_oauth" }>;
@@ -106,6 +107,13 @@ export async function POST(req: NextRequest) {
     avatarUrl: links?.find((l) => l.avatar_url)?.avatar_url ?? null,
     profileVisibility: visibilityFromRow(user),
     verification,
+    username: (user.username as string | null) ?? null,
+    // When they may change it next (null = now); the first choice is free.
+    usernameChangeableAt:
+      user.username && user.username_changed_at
+        ? new Date(Date.parse(user.username_changed_at) + USERNAME_CHANGE_DAYS * 86400000).toISOString()
+        : null,
+    suggestedUsername: user.username ? null : suggestUsername(google.name),
     // Off until the Twilio settings are added; the app then hides the phone option.
     phoneVerifyAvailable: phoneVerifyConfigured(),
     canWithdrawToAddress: mayWithdrawToAddress(google.email),
@@ -115,6 +123,7 @@ export async function POST(req: NextRequest) {
 const PatchSchema = z.union([
   z.object({ mode: z.enum(["viewer", "creator"]) }),
   z.object({ profileVisibility: VisibilityPatchSchema }),
+  z.object({ username: z.string().max(40) }),
 ]);
 
 /**
@@ -133,6 +142,27 @@ export async function PATCH(req: NextRequest) {
   const parsed = PatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Choose viewer or creator" }, { status: 400 });
+  }
+
+  if ("username" in parsed.data) {
+    const check = checkUsername(parsed.data.username);
+    if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
+    const { data: outcome, error } = await supabaseServer().rpc("set_username", {
+      p_user: user.id,
+      p_username: check.username,
+    });
+    if (error) {
+      console.error("set_username failed", error);
+      return NextResponse.json({ error: "Could not save that. Please try again." }, { status: 500 });
+    }
+    if (outcome !== "ok") {
+      const e = SET_USERNAME_ERRORS[outcome as string] ?? SET_USERNAME_ERRORS.invalid;
+      return NextResponse.json({ error: e.error }, { status: e.status });
+    }
+    return NextResponse.json({
+      username: check.username,
+      usernameChangeableAt: new Date(Date.now() + USERNAME_CHANGE_DAYS * 86400000).toISOString(),
+    });
   }
 
   if ("profileVisibility" in parsed.data) {

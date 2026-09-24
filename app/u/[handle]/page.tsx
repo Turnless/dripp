@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
+import { redirect } from "next/navigation";
 import { ArrowRight, BadgeCheck, Hourglass, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -19,6 +20,8 @@ type Profile =
   | {
       kind: "found";
       handle: string;
+      /** Linked YouTube handle, if any. */
+      youtubeHandle: string | null;
       avatarUrl: string | null;
       verified: boolean;
       show: ProfileVisibility;
@@ -30,7 +33,7 @@ type Profile =
     };
 
 /**
- * A creator's public page: handle and verified badge, plus whichever of
+ * A public page, by dripp username or linked YouTube handle: name and verified badge, plus whichever of
  * their totals and subscriber count they chose to show on Profile ("What
  * people see", PRD 7.1). Anything they hide is never read or sent to the
  * page. Dollars and handles only.
@@ -39,25 +42,57 @@ async function loadProfile(raw: string): Promise<Profile> {
   noStore();
   const handle = normalizeHandle(decodeURIComponent(raw));
   const db = supabaseServer();
-  const { data: link } = await db
-    .from("platform_links")
-    .select("user_id, platform_username, avatar_url, channel_id")
-    .eq("platform", "youtube")
-    .eq("platform_username", handle)
-    .maybeSingle();
-  if (!link) return { kind: "not_found", handle };
 
-  // A failed read shows nothing (visibilityFromRow treats missing as hidden).
-  const { data: owner } = await db.from("users").select("*").eq("id", link.user_id).maybeSingle();
+  // A dripp username first; then a linked YouTube handle, so older /u/<handle>
+  // links keep working.
+  let { data: owner } = await db.from("users").select("*").eq("username", handle).maybeSingle();
+  if (!owner) {
+    // A name changed in the last 30 days still leads to its owner's new page.
+    const { data: hold } = await db
+      .from("username_holds")
+      .select("user_id, held_until")
+      .eq("username", handle)
+      .gt("held_until", new Date().toISOString())
+      .maybeSingle();
+    if (hold) {
+      const { data: moved } = await db.from("users").select("username").eq("id", hold.user_id).maybeSingle();
+      if (moved?.username) redirect(`/u/${moved.username}`);
+    }
+  }
+
+  let link: { user_id: string; platform_username: string; avatar_url: string | null; channel_id: string | null } | null =
+    null;
+  if (owner) {
+    const { data } = await db
+      .from("platform_links")
+      .select("user_id, platform_username, avatar_url, channel_id")
+      .eq("platform", "youtube")
+      .eq("user_id", owner.id)
+      .maybeSingle();
+    link = data;
+  } else {
+    const { data } = await db
+      .from("platform_links")
+      .select("user_id, platform_username, avatar_url, channel_id")
+      .eq("platform", "youtube")
+      .eq("platform_username", handle)
+      .maybeSingle();
+    if (!data) return { kind: "not_found", handle };
+    link = data;
+    // A failed read shows nothing (visibilityFromRow treats missing as hidden).
+    ({ data: owner } = await db.from("users").select("*").eq("id", data.user_id).maybeSingle());
+  }
+
+  const userId = (owner?.id as string | undefined) ?? link?.user_id;
   const show = visibilityFromRow(owner);
 
   let totals: Record<string, unknown> = {};
-  if (show.received || show.sent) {
-    const { data } = await db.rpc("profile_totals", { p_user_id: link.user_id });
+  if (userId && (show.received || show.sent)) {
+    const { data } = await db.rpc("profile_totals", { p_user_id: userId });
     totals = (Array.isArray(data) ? data[0] : data) ?? {};
   }
   let subscribers: number | null = null;
-  if (show.subscribers && link.channel_id) {
+  if (show.subscribers && link?.channel_id) {
     try {
       subscribers = await youtubeSubscriberCount(link.channel_id);
     } catch (err) {
@@ -67,9 +102,10 @@ async function loadProfile(raw: string): Promise<Profile> {
 
   return {
     kind: "found",
-    handle: link.platform_username,
-    avatarUrl: link.avatar_url,
-    verified: !!link.channel_id,
+    handle: (owner?.username as string | null) ?? link?.platform_username ?? handle,
+    youtubeHandle: link?.platform_username ?? null,
+    avatarUrl: link?.avatar_url ?? null,
+    verified: !!link?.channel_id,
     show,
     receivedCents: show.received ? Math.round(Number(totals.received ?? 0) * 100) : 0,
     receivedCount: show.received && show.tipCounts ? Number(totals.received_count ?? 0) : 0,
@@ -114,9 +150,9 @@ export default async function PublicProfilePage({ params }: { params: { handle: 
             <p className="mt-1 text-caption text-muted">
               {p.kind === "not_found"
                 ? "Not on dripp yet"
-                : p.verified
-                  ? "Verified YouTube channel"
-                  : "YouTube channel"}
+                : p.youtubeHandle
+                  ? `${p.verified ? "Verified YouTube channel" : "YouTube channel"} · @${p.youtubeHandle}`
+                  : "On dripp"}
             </p>
           </div>
 

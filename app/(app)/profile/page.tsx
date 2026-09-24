@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { ArrowUpRight, ChevronRight, HeartHandshake, LogOut, Radio } from "lucide-react";
 import { useAccount } from "@/components/account";
 import { ChannelCard } from "@/components/LinkChannel";
 import { VerificationCard } from "@/components/VerificationCard";
+import { UsernameField } from "@/components/UsernamePicker";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -18,9 +19,9 @@ import { VISIBILITY_OPTIONS, type ProfileVisibility } from "@/lib/profile-visibi
 /** Profile + settings. */
 export default function ProfilePage() {
   const { user, logout } = usePrivy();
-  const { mode, avatarUrl, links, profileVisibility } = useAccount();
-  const channel = links.find((l) => l.platform === "youtube");
+  const { mode, avatarUrl, profileVisibility, username } = useAccount();
   const [visibilityOpen, setVisibilityOpen] = useState(false);
+  const [usernameOpen, setUsernameOpen] = useState(false);
   const shown = VISIBILITY_OPTIONS.filter((o) => profileVisibility[o.key]).map((o) => o.label);
   const shownSummary = shown.length === 0 ? "Nothing but your handle" : shown.join(", ");
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -41,6 +42,7 @@ export default function ProfilePage() {
           <Avatar src={avatarUrl} name={name} className="h-16 w-16 text-title-1" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-title-2 !font-extrabold">{name}</p>
+            {username && <p className="truncate font-semibold">@{username}</p>}
             {email && <p className="truncate text-caption text-muted">{email}</p>}
             {/* Chosen once at sign-up; it can't be changed. */}
             <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-caption font-bold text-on-primary">
@@ -64,22 +66,33 @@ export default function ProfilePage() {
         </StaggerItem>
       )}
 
-      {channel && (
+      {username && (
         <StaggerItem>
           <GlassCard className="overflow-hidden">
             <div className="flex items-center justify-between gap-4 px-5 pt-5">
               <div className="min-w-0">
                 <p className="font-bold">Public profile</p>
-                <p className="truncate text-caption text-muted">dripp · /u/{channel.platform_username}</p>
+                <p className="truncate text-caption text-muted">dripp · /u/{username}</p>
               </div>
               <Link
-                href={`/u/${channel.platform_username}`}
+                href={`/u/${username}`}
                 target="_blank"
                 className="pressable inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-text/[0.06] px-3 text-caption font-bold hover:bg-text/[0.1]"
               >
                 View <ArrowUpRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>
+            <button
+              type="button"
+              onClick={() => setUsernameOpen(true)}
+              className="pressable mt-3 flex w-full items-center justify-between gap-4 border-t border-deep/5 px-5 py-4 text-left hover:bg-text/[0.03]"
+            >
+              <span className="min-w-0">
+                <span className="block font-bold">Username</span>
+                <span className="block truncate text-caption text-muted">@{username}</span>
+              </span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted" aria-hidden />
+            </button>
             <button
               type="button"
               onClick={() => setVisibilityOpen(true)}
@@ -117,6 +130,7 @@ export default function ProfilePage() {
       </StaggerItem>
 
       <VisibilitySheet open={visibilityOpen} onClose={() => setVisibilityOpen(false)} />
+      <UsernameSheet open={usernameOpen} onClose={() => setUsernameOpen(false)} />
 
       <Sheet open={confirmSignOut} onClose={() => setConfirmSignOut(false)} title="Sign out?">
         <div className="flex flex-col gap-6">
@@ -160,7 +174,7 @@ function VisibilitySheet({ open, onClose }: { open: boolean; onClose: () => void
     <Sheet open={open} onClose={onClose} title="What people see">
       <div className="flex flex-col gap-4 pt-1">
         <p className="text-muted">
-          Your public page always shows your handle, picture and verified badge. Choose what else
+          Your public page always shows your username, picture and verified badge. Choose what else
           appears.
         </p>
         <ul className="divide-y divide-deep/5 overflow-hidden rounded-card bg-text/[0.03]">
@@ -206,6 +220,79 @@ function VisibilitySheet({ open, onClose }: { open: boolean; onClose: () => void
           Done
         </Button>
       </div>
+    </Sheet>
+  );
+}
+
+const dateFormat = new Intl.DateTimeFormat("en", { day: "numeric", month: "long" });
+
+/** Change the username: once every 30 days; the old one stays yours for 30 days. */
+function UsernameSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { username, usernameChangeableAt, setUsername } = useAccount();
+  const [value, setValue] = useState(username ?? "");
+  const [ok, setOk] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setValue(username ?? "");
+    setError(null);
+  }, [open, username]);
+
+  const lockedUntil =
+    usernameChangeableAt && new Date(usernameChangeableAt).getTime() > Date.now() ? new Date(usernameChangeableAt) : null;
+  const unchanged = value === username;
+
+  async function save() {
+    if (!ok || unchanged || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await setUsername(value);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Username">
+      {lockedUntil ? (
+        <div className="flex flex-col gap-4 pt-1">
+          <p className="text-muted">
+            You&apos;re <span className="font-semibold text-text">@{username}</span>. You can change it again
+            on {dateFormat.format(lockedUntil)}.
+          </p>
+          <Button size="lg" fullWidth onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+          className="flex flex-col gap-4 pt-1"
+        >
+          <p className="text-muted">
+            You can change it once every 30 days. For 30 days after a change, nobody else can take your old
+            one, and tips sent to it still reach you.
+          </p>
+          <UsernameField value={value} onChange={setValue} onAvailability={setOk} />
+          {error && (
+            <p className="text-caption text-negative" role="alert">
+              {error}
+            </p>
+          )}
+          <Button type="submit" size="lg" fullWidth loading={saving} disabled={!ok || unchanged}>
+            Save
+          </Button>
+        </form>
+      )}
     </Sheet>
   );
 }

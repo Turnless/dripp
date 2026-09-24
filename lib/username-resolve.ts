@@ -3,6 +3,8 @@ import { lookupYoutubeHandle } from "./youtube";
 import { lookupKickUsername } from "./kick";
 
 type Platform = "youtube" | "kick";
+/** Where a tip can be addressed: a platform handle, or a dripp username. */
+export type TipPlatform = Platform | "dripp";
 
 export type ResolvedRecipient =
   | { status: "existing_user"; userId: string; walletAddress: `0x${string}` }
@@ -92,6 +94,33 @@ const asRecipient = (link: LinkRow): ResolvedRecipient => ({
 });
 
 /**
+ * A dripp username is already a dripp user, so a tip to it is always direct.
+ * A name someone changed away from in the last 30 days still reaches them
+ * (username_holds), so tips meant for them can't land with someone else.
+ */
+async function resolveDrippUsername(username: string): Promise<ResolvedRecipient> {
+  const db = supabaseServer();
+  const { data: user, error } = await db
+    .from("users")
+    .select("id, wallet_address")
+    .eq("username", username)
+    .maybeSingle();
+  if (error) throw error;
+  if (user) return { status: "existing_user", userId: user.id, walletAddress: user.wallet_address as `0x${string}` };
+
+  const { data: hold, error: holdErr } = await db
+    .from("username_holds")
+    .select("user_id, held_until, users(wallet_address)")
+    .eq("username", username)
+    .maybeSingle();
+  if (holdErr) throw holdErr;
+  if (hold && Date.parse(hold.held_until) > Date.now()) {
+    return asRecipient({ user_id: hold.user_id, channel_id: null, users: hold.users });
+  }
+  return { status: "not_found" };
+}
+
+/**
  * Resolves a tip recipient. The platform's channel ID is the identity -- a
  * handle only says which channel is meant *right now*:
  *   1. Ask which channel the handle belongs to (cached platform lookup; this
@@ -102,9 +131,10 @@ const asRecipient = (link: LinkRow): ResolvedRecipient => ({
  *   3. Otherwise it's escrowed under the channel (see lib/tipvault.ts).
  * If the platform can't be reached, a link under this handle is trusted.
  */
-export async function resolveRecipient(platform: Platform, usernameRaw: string): Promise<ResolvedRecipient> {
+export async function resolveRecipient(platform: TipPlatform, usernameRaw: string): Promise<ResolvedRecipient> {
   const username = normalizeHandle(usernameRaw);
   const db = supabaseServer();
+  if (platform === "dripp") return resolveDrippUsername(username);
 
   const { data: byHandle, error } = await db
     .from("platform_links")

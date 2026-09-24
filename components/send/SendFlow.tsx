@@ -11,7 +11,7 @@ import { useSendTip } from "@/lib/money-client";
 import { formatUsd, parseUsdToCents } from "@/lib/format";
 import { MAX_TIP_CENTS } from "@/lib/fees";
 
-type Platform = "youtube" | "kick";
+type Platform = "youtube" | "kick" | "dripp";
 export type SendPrefill = { platform: Platform; handle: string };
 type Step = "who" | "amount" | "review" | "sent";
 type Lookup = "idle" | "checking" | "existing_user" | "verified_unclaimed" | "not_found" | "error";
@@ -19,6 +19,7 @@ type Lookup = "idle" | "checking" | "existing_user" | "verified_unclaimed" | "no
 const PLATFORMS: { id: Platform; label: string }[] = [
   { id: "youtube", label: "YouTube" },
   { id: "kick", label: "Kick" },
+  { id: "dripp", label: "dripp" },
 ];
 const QUICK_AMOUNTS = [100, 200, 500, 1000];
 
@@ -143,6 +144,12 @@ function StepPane({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** "YouTube · On dripp", or just "dripp username" for a dripp username. */
+function recipientDetail(platformName: string, joined: boolean) {
+  if (platformName === "dripp") return "dripp username";
+  return `${platformName} · ${joined ? "On dripp" : "Hasn't joined yet"}`;
+}
+
 // ---------- Step 1: who ----------
 
 function WhoStep({
@@ -201,7 +208,7 @@ function WhoStep({
       }}
       className="flex flex-col gap-5"
     >
-      <div role="radiogroup" aria-label="Platform" className="glass-thin grid grid-cols-2 gap-1 rounded-full p-1">
+      <div role="radiogroup" aria-label="Platform" className="glass-thin grid grid-cols-3 gap-1 rounded-full p-1">
         {PLATFORMS.map((p) => (
           <button
             key={p.id}
@@ -319,7 +326,7 @@ function AmountStep({
       }}
       className="flex flex-col gap-5"
     >
-      <Recipient handle={handle} detail={`${platformName} · ${joined ? "On dripp" : "Hasn't joined yet"}`} />
+      <Recipient handle={handle} detail={recipientDetail(platformName, joined)} />
 
       <label className="flex items-center justify-center py-2">
         <span className="sr-only">Amount in dollars</span>
@@ -433,7 +440,7 @@ function ReviewStep({
 
   return (
     <div className="flex flex-col gap-6">
-      <Recipient handle={handle} detail={`${platform === "kick" ? "Kick" : "YouTube"} · ${joined ? "On dripp" : "Hasn't joined yet"}`} />
+      <Recipient handle={handle} detail={recipientDetail(PLATFORMS.find((p) => p.id === platform)!.label, joined)} />
       <p className="num text-center text-[3.5rem] font-extrabold leading-none tracking-[-0.05em]">{formatUsd(cents)}</p>
 
       <dl className="flex flex-col gap-3 rounded-card border border-text/10 p-4 text-[0.9375rem]">

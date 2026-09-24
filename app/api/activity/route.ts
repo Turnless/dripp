@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
       .limit(limit),
   ]);
 
-  // Handles for everyone we need to name.
+  // Usernames (or handles) for everyone we need to name.
   const otherIds = new Set<string>();
   tips.data?.forEach((t) => otherIds.add(t.sender_id === me.id ? t.recipient_id : t.sender_id));
   collected.data?.forEach((c) => otherIds.add(c.sender_id));
@@ -70,6 +70,13 @@ export async function GET(req: NextRequest) {
       .select("user_id, platform_username")
       .in("user_id", Array.from(otherIds));
     links?.forEach((l) => names.set(l.user_id, `@${l.platform_username}`));
+    // A dripp username wins over a channel handle.
+    const { data: users } = await db
+      .from("users")
+      .select("id, username")
+      .in("id", Array.from(otherIds))
+      .not("username", "is", null);
+    users?.forEach((u) => names.set(u.id, `@${u.username}`));
   }
 
   const items: ActivityItem[] = [
