@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useAccount } from "@/components/account";
 import { ChannelCard } from "@/components/LinkChannel";
 import { BulkSendSheet } from "@/components/send/BulkSendSheet";
+import { TipperBreakdownCard } from "@/components/creator/TipperBreakdownCard";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Stagger, StaggerItem, springs } from "@/components/motion";
@@ -102,6 +103,11 @@ export default function CreatorPage() {
             </div>
           }
         />
+      </StaggerItem>
+
+      {/* Bot/real breakdown of the last 30 days' tippers */}
+      <StaggerItem>
+        <TipperBreakdownCard />
       </StaggerItem>
 
       {/* Stream alerts */}

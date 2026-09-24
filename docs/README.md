@@ -36,8 +36,9 @@ README covers the code. The design tokens (the "Coin" palette -- yellow
 
 Automated tests: `npm test` (money math, the onchain log checks, the confirm
 route, OAuth state, channel-ID resolution, the lookup cache, rate limiting,
-refunds, the one-time mode choice, the public-profile options and who may
-withdraw to an address) and `forge test` in `contracts/` (unit tests plus invariant tests: every handle's escrow equals
+refunds, the one-time mode choice, the public-profile options, who may
+withdraw to an address, and the bot/real rules) and `forge test` in
+`contracts/` (unit tests plus invariant tests: every handle's escrow equals
 its senders' contributions and the vault's balance, and a claimed tip can
 never also be refunded).
 
@@ -98,6 +99,8 @@ app/                          Next.js App Router
     tip/confirm/              POST -- verify the tx onchain against the intent, then record the tip
     withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (to a wallet address, testers only, until Mercuryo)
     creator/stats/            GET -- live subscriber count of the caller's linked channel
+    creator/tippers/          GET -- 30-day bot/real breakdown of the caller's tippers (counts only)
+    bot-check/                POST -- flag likely bots in a reward drop's recipient list
     balance/                  GET -- balance in cents
     activity/                 GET -- history (tips, escrow, withdrawals); ?week=1 adds the last 7 days received
     username/resolve/         GET -- check if a username exists/is verifiable
@@ -116,6 +119,8 @@ lib/
   tip-plan.ts                 Where a tip goes + the exact calls (saved as a tip intent by prepare)
   withdraw-plan.ts            Withdrawal calls: 1% fee to treasury + payout, batched
   withdraw-access.ts          Who may withdraw to a wallet address (WITHDRAW_TO_ADDRESS_EMAILS)
+  bot-check.ts                Bot/real rules for tippers and reward-drop recipients (pure, tested)
+  tipper-check.ts             Loads a creator's tipper signals and classifies them
   profile-visibility.ts       What the public profile shows (the "What people see" options)
   tipvault.ts                 TipVault ABI + handle hash
   money-client.ts             Browser: useSendTip, useWithdraw, useBalance, useActivity, unconfirmed tip/withdrawal retries
@@ -292,8 +297,9 @@ NextAuth on top (see the comment at the top of `lib/oauth.ts`).
 - In-app usernames: only YouTube/Kick handles can be tipped, so someone who
   hasn't linked a channel can't receive tips yet (anyone can link one --
   viewers on Profile, creators on the Creator page)
-- The bot/real breakdown dashboard and the bot filter for reward drops
-  (`bot_scores` table exists, nothing populates it yet)
+- Funding-source clustering for the bot check (needs an onchain indexer).
+  The bot/real breakdown and the reward-drop filter are built on account,
+  channel and timing signals (`lib/bot-check.ts`); `bot_scores` is unused.
 - Row Level Security *policies* in Supabase -- RLS itself is enabled on
   every table and the browser never talks to Supabase directly (only the
   server, with the service-role key); add narrow policies only if that

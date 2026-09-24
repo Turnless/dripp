@@ -404,6 +404,54 @@ as $$
       + (select count(*) from pending_tips where sender_id = p_user_id and refunded_at is null);
 $$;
 
+-- Signals for the bot/real breakdown (lib/bot-check.ts classifies them):
+-- one row per person who tipped p_creator since p_since (direct tips +
+-- escrowed tips the creator collected), with their account age, whether they
+-- verified a channel, when they first tipped this creator, and how many
+-- different people / days they've tipped overall.
+create or replace function tipper_signals(p_creator uuid, p_since timestamptz)
+returns table (
+  sender_id uuid,
+  account_created_at timestamptz,
+  has_verified_channel boolean,
+  first_tip_at timestamptz,
+  recipients_count bigint,
+  active_days bigint
+)
+language sql
+stable
+set search_path = public
+as $$
+  with incoming as (
+    select t.sender_id, t.created_at as at from tips t
+      where t.recipient_id = p_creator and t.created_at >= p_since
+    union all
+    select p.sender_id, p.created_at from pending_tips p
+      where p.claimed_by = p_creator and p.created_at >= p_since
+  ),
+  senders as (
+    select i.sender_id, min(i.at) as first_tip_at from incoming i group by i.sender_id
+  ),
+  outgoing as (
+    select t.sender_id, t.recipient_id::text as to_key, t.created_at from tips t
+      where t.sender_id in (select s.sender_id from senders s)
+    union all
+    -- An escrowed tip counts as going to whoever collected it, else the handle.
+    select p.sender_id, coalesce(p.claimed_by::text, p.platform || ':' || p.platform_username), p.created_at
+      from pending_tips p
+      where p.sender_id in (select s.sender_id from senders s)
+  )
+  select
+    s.sender_id,
+    u.created_at,
+    exists (select 1 from platform_links l where l.user_id = s.sender_id and l.channel_id is not null),
+    s.first_tip_at,
+    (select count(distinct o.to_key) from outgoing o where o.sender_id = s.sender_id),
+    (select count(distinct date_trunc('day', o.created_at)) from outgoing o where o.sender_id = s.sender_id)
+  from senders s
+  join users u on u.id = s.sender_id;
+$$;
+
 -- Only the server (service-role key) may call these. Supabase grants new
 -- functions to anon/authenticated by default, and the anon key is public.
 revoke execute on function tx_has_legacy_record(text) from public, anon, authenticated;
@@ -414,6 +462,7 @@ revoke execute on function hit_rate_limit(text[], integer[], integer) from publi
 revoke execute on function record_refund(uuid, text, integer, bigint, text, text, text) from public, anon, authenticated;
 revoke execute on function link_platform_account(uuid, text, text, text, text) from public, anon, authenticated;
 revoke execute on function profile_totals(uuid) from public, anon, authenticated;
+revoke execute on function tipper_signals(uuid, timestamptz) from public, anon, authenticated;
 grant execute on function tx_has_legacy_record(text) to service_role;
 grant execute on function record_tip(uuid, uuid, text, integer[], bigint) to service_role;
 grant execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) to service_role;
@@ -422,3 +471,4 @@ grant execute on function hit_rate_limit(text[], integer[], integer) to service_
 grant execute on function record_refund(uuid, text, integer, bigint, text, text, text) to service_role;
 grant execute on function link_platform_account(uuid, text, text, text, text) to service_role;
 grant execute on function profile_totals(uuid) to service_role;
+grant execute on function tipper_signals(uuid, timestamptz) to service_role;
