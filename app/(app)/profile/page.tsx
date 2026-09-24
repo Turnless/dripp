@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { HeartHandshake, LogOut, Radio } from "lucide-react";
 import { useAccount } from "@/components/account";
@@ -15,7 +16,22 @@ import { WITHDRAWAL_FEE_PERCENT } from "@/lib/fees";
 /** Profile + settings. */
 export default function ProfilePage() {
   const { user, logout } = usePrivy();
-  const { mode, avatarUrl } = useAccount();
+  const { mode, avatarUrl, links, profilePublic, setProfilePublic } = useAccount();
+  const channel = links.find((l) => l.platform === "youtube");
+  const [savingPublic, setSavingPublic] = useState(false);
+  const [publicError, setPublicError] = useState<string | null>(null);
+
+  async function togglePublic() {
+    setSavingPublic(true);
+    setPublicError(null);
+    try {
+      await setProfilePublic(!profilePublic);
+    } catch (e) {
+      setPublicError(e instanceof Error ? e.message : "Could not save that. Please try again.");
+    } finally {
+      setSavingPublic(false);
+    }
+  }
   const [confirmSignOut, setConfirmSignOut] = useState(false);
 
   const name = user?.google?.name ?? "Your profile";
@@ -50,6 +66,47 @@ export default function ProfilePage() {
             page="profile"
             blurb="Let people tip you by your YouTube handle, and collect any tips sent to it before you joined."
           />
+        </StaggerItem>
+      )}
+
+      {channel && (
+        <StaggerItem>
+          <GlassCard className="flex flex-col gap-2 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-bold">Show my totals publicly</p>
+                <p className="text-caption text-muted">
+                  What you&apos;ve received and tipped out, on{" "}
+                  <Link href={`/u/${channel.platform_username}`} target="_blank" className="underline decoration-brand decoration-2 underline-offset-2">
+                    your public page
+                  </Link>
+                  .
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={profilePublic}
+                aria-label="Show my totals publicly"
+                disabled={savingPublic}
+                onClick={togglePublic}
+                className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-60 ${
+                  profilePublic ? "bg-primary" : "bg-text/15"
+                }`}
+              >
+                <span
+                  className={`absolute top-1 h-6 w-6 rounded-full shadow transition-all ${
+                    profilePublic ? "left-7 bg-brand" : "left-1 bg-white"
+                  }`}
+                />
+              </button>
+            </div>
+            {publicError && (
+              <p className="text-caption text-negative" role="alert">
+                {publicError}
+              </p>
+            )}
+          </GlassCard>
         </StaggerItem>
       )}
 

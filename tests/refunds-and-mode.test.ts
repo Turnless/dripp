@@ -131,4 +131,27 @@ describe("viewer/creator mode is chosen once", () => {
     const res = await patch("viewer");
     expect(res.status).toBe(409);
   });
+
+  it("switches the public profile on and off without touching the mode", async () => {
+    const res = await PATCH(
+      new Request("http://test/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profilePublic: false }),
+      }) as never
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ profilePublic: false });
+  });
+
+  it("rejects anything else", async () => {
+    const res = await PATCH(
+      new Request("http://test/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "admin" }),
+      }) as never
+    );
+    expect(res.status).toBe(400);
+  });
 });

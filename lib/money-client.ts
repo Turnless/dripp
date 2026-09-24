@@ -159,6 +159,111 @@ export function useSendTip() {
   );
 }
 
+/**
+ * Withdrawals sent but not yet recorded, kept like unconfirmed tips. There's
+ * no saved intent for a withdrawal, so the confirm call repeats its inputs.
+ */
+type UnconfirmedWithdrawal = { amountUsd: number; destination: string; txHash: `0x${string}`; at: number };
+const UNCONFIRMED_WITHDRAWALS_KEY = "dripp:unconfirmed-withdrawals";
+
+function loadUnconfirmedWithdrawals(): UnconfirmedWithdrawal[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(UNCONFIRMED_WITHDRAWALS_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (w): w is UnconfirmedWithdrawal =>
+        typeof w?.amountUsd === "number" &&
+        typeof w?.destination === "string" &&
+        typeof w?.txHash === "string" &&
+        typeof w?.at === "number" &&
+        Date.now() - w.at < UNCONFIRMED_MAX_AGE_MS
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveUnconfirmedWithdrawals(list: UnconfirmedWithdrawal[]) {
+  try {
+    if (list.length) localStorage.setItem(UNCONFIRMED_WITHDRAWALS_KEY, JSON.stringify(list));
+    else localStorage.removeItem(UNCONFIRMED_WITHDRAWALS_KEY);
+  } catch {}
+}
+
+const forgetUnconfirmedWithdrawal = (txHash: string) =>
+  saveUnconfirmedWithdrawals(loadUnconfirmedWithdrawals().filter((w) => w.txHash !== txHash));
+
+/** One call to /api/withdraw/confirm; same outcomes as confirmOnce. */
+async function confirmWithdrawalOnce(
+  authedFetch: AuthedFetch,
+  w: UnconfirmedWithdrawal
+): Promise<"recorded" | "not_sent" | "gone" | "retry"> {
+  let res: Response;
+  try {
+    res = await authedFetch("/api/withdraw/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amountUsd: w.amountUsd, destination: w.destination, txHash: w.txHash }),
+    });
+  } catch {
+    return "retry";
+  }
+  if (res.status === 200) return "recorded";
+  if (res.status === 422) return "not_sent";
+  if (res.status === 400 || res.status === 409) return "gone";
+  return "retry";
+}
+
+/**
+ * Withdraws from the user's smart wallet: /api/withdraw/prepare returns the
+ * payout + the 1% fee as one batched, gas-free operation; then confirm
+ * records it. Like tips, once the wallet has sent this never invites sending
+ * again, except when the mined transaction didn't move the money.
+ */
+export function useWithdraw() {
+  const { client } = useSmartWallets();
+  const authedFetch = useAuthedFetch();
+
+  return useCallback(
+    async (amountUsd: number, destination: string): Promise<void> => {
+      if (!client) throw new Error("Your account is still getting ready. Try again in a few seconds.");
+
+      const prep = await authedFetch("/api/withdraw/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amountUsd, destination }),
+      });
+      if (!prep.ok) throw new Error(await readError(prep));
+      const { calls } = (await prep.json()) as { calls: Call[] };
+
+      let txHash: `0x${string}`;
+      try {
+        txHash = await exclusive(() => client.sendTransaction({ calls }));
+      } catch (err) {
+        console.error("smart wallet send failed", err);
+        throw new Error("We couldn't complete the withdrawal. Check your balance and activity before trying again.");
+      }
+
+      const sent: UnconfirmedWithdrawal = { amountUsd, destination, txHash, at: Date.now() };
+      saveUnconfirmedWithdrawals([...loadUnconfirmedWithdrawals(), sent]);
+      for (let attempt = 0; attempt < CONFIRM_ATTEMPTS; attempt++) {
+        const outcome = await confirmWithdrawalOnce(authedFetch, sent);
+        if (outcome === "recorded" || outcome === "gone") {
+          forgetUnconfirmedWithdrawal(txHash);
+          break;
+        }
+        if (outcome === "not_sent") {
+          forgetUnconfirmedWithdrawal(txHash);
+          throw new Error("That withdrawal didn't go through, so nothing was sent. Please try again.");
+        }
+        if (attempt < CONFIRM_ATTEMPTS - 1) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      }
+      announceMoneyChanged();
+    },
+    [client, authedFetch]
+  );
+}
+
 let finishStarted = false;
 
 /**
@@ -171,7 +276,9 @@ export function useFinishUnconfirmedTips() {
     if (finishStarted) return;
     const list = loadUnconfirmed();
     saveUnconfirmed(list); // drops expired entries
-    if (!list.length) return;
+    const withdrawals = loadUnconfirmedWithdrawals();
+    saveUnconfirmedWithdrawals(withdrawals);
+    if (!list.length && !withdrawals.length) return;
     finishStarted = true;
     (async () => {
       let changed = false;
@@ -179,6 +286,12 @@ export function useFinishUnconfirmedTips() {
         const { outcome } = await confirmOnce(authedFetch, u);
         if (outcome === "retry") continue;
         forgetUnconfirmed(u.intentId);
+        if (outcome === "recorded") changed = true;
+      }
+      for (const w of withdrawals) {
+        const outcome = await confirmWithdrawalOnce(authedFetch, w);
+        if (outcome === "retry") continue;
+        forgetUnconfirmedWithdrawal(w.txHash);
         if (outcome === "recorded") changed = true;
       }
       if (changed) announceMoneyChanged();

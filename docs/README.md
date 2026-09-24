@@ -7,8 +7,10 @@ gas-sponsored smart wallet; tips to creators who haven't joined yet are held
 in the `TipVault` escrow contract until they link their channel.
 
 The product and design docs (`03-product-requirements-document.md`,
-`04-architecture.md`, `design.md`) live in `docs/` locally and are not
-published; this README covers the code.
+`04-architecture.md`) live in `docs/` locally and are not published; this
+README covers the code. The design tokens (the "Coin" palette -- yellow
+`#FFD23F` and ink `#111111` -- and Schibsted Grotesk) are in
+`app/globals.css` and `tailwind.config.ts`.
 
 ## Status
 
@@ -16,12 +18,16 @@ published; this README covers the code.
 - Google sign-in with an invisible, gas-sponsored smart wallet (Privy smart
   wallets, Kernel account; bundler + paymaster from Pimlico).
 - Sending tips between two users, gas paid by the paymaster.
+- Releasing escrowed tips when someone links their YouTube channel (anyone
+  can link: creators on the Creator page, viewers on Profile), signed by the
+  Privy server wallet that owns TipVault.
 
 **Built, confirm on mainnet before relying on it**
-- Releasing escrowed tips when someone links their YouTube channel (anyone
-  can link: creators on the Creator page, viewers on Profile).
 - Returning escrowed tips to the sender after 30 days unclaimed.
-- The Privy server wallet as the escrow claim signer.
+- Withdrawing to a wallet address (the offramp stand-in, only for the
+  accounts in `WITHDRAW_TO_ADDRESS_EMAILS`).
+- The live subscriber count on the Creator page and the public profile page
+  (`/u/<handle>`, totals received and tipped out, can be made private).
 - Bulk sends (the same path as a single tip, once per recipient).
 - The background recovery job (records tips and refunds whose confirmation
   was missed, finishes escrow claims).
@@ -29,8 +35,8 @@ published; this README covers the code.
 
 Automated tests: `npm test` (money math, the onchain log checks, the confirm
 route, OAuth state, channel-ID resolution, the lookup cache, rate limiting,
-refunds and the one-time mode choice) and `forge test` in
-`contracts/` (unit tests plus invariant tests: every handle's escrow equals
+refunds, the one-time mode choice, the public-profile switch and who may
+withdraw to an address) and `forge test` in `contracts/` (unit tests plus invariant tests: every handle's escrow equals
 its senders' contributions and the vault's balance, and a claimed tip can
 never also be refunded).
 
@@ -84,13 +90,15 @@ app/                          Next.js App Router
   (app)/                      Signed-in app: Money, Activity, Creator, Profile
   providers.tsx               Privy + SmartWalletsProvider (gas-free sending)
   overlay/[username]/         OBS browser-source page (?platform=youtube|kick)
+  u/[handle]/                 Public profile: totals received / tipped out (unless private)
   api/
-    me/                       POST sign-up/sync, PATCH viewer/creator mode
+    me/                       POST sign-up/sync, PATCH viewer/creator mode or public-profile switch
     tip/prepare/              POST -- save a tip intent, return the calls for the smart wallet to send
     tip/confirm/              POST -- verify the tx onchain against the intent, then record the tip
-    withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (UI waits on Mercuryo)
+    withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (to a wallet address, testers only, until Mercuryo)
+    creator/stats/            GET -- live subscriber count of the caller's linked channel
     balance/                  GET -- balance in cents
-    activity/                 GET -- history (tips, escrow, withdrawals)
+    activity/                 GET -- history (tips, escrow, withdrawals); ?week=1 adds the last 7 days received
     username/resolve/         GET -- check if a username exists/is verifiable
     platform/link/[provider]  POST (Privy token) -- returns the OAuth URL to link YouTube/Kick
     platform/callback/[provider]  GET -- finish OAuth, link the channel, release escrowed tips
@@ -106,9 +114,10 @@ lib/
   escrow-refunds.ts           What a sender can take back after 30 days; record refunds
   tip-plan.ts                 Where a tip goes + the exact calls (saved as a tip intent by prepare)
   withdraw-plan.ts            Withdrawal calls: 1% fee to treasury + payout, batched
+  withdraw-access.ts          Who may withdraw to a wallet address (WITHDRAW_TO_ADDRESS_EMAILS)
   tipvault.ts                 TipVault ABI + handle hash
-  money-client.ts             Browser: useSendTip, useBalance, useActivity, unconfirmed-tip retries
-  youtube.ts / kick.ts        Single-username platform lookups
+  money-client.ts             Browser: useSendTip, useWithdraw, useBalance, useActivity, unconfirmed tip/withdrawal retries
+  youtube.ts / kick.ts        Single-username platform lookups; YouTube subscriber count by channel ID
   username-resolve.ts         Handle -> channel ID (cached platform lookup) -> linked user or escrow
   rate-limit.ts               Per-user / per-IP API limits, counted in Postgres
   oauth.ts                    Signed-state helper for platform linking
@@ -271,9 +280,9 @@ NextAuth on top (see the comment at the top of `lib/oauth.ts`).
 
 ## Deliberately left as TODOs, not built
 
-- Withdraw UI / Mercuryo offramp integration (the fee-collecting withdraw
-  API exists; the sheet stays disabled until Mercuryo supplies a destination)
-- Add Money (onramp) -- wallets are funded externally for now
+- Mercuryo onramp/offramp: Add Money (wallets are funded externally for
+  now) and cash-out to a bank or card. Withdrawing to a wallet address is the
+  stand-in, offered only to the accounts in `WITHDRAW_TO_ADDRESS_EMAILS`.
 - Refunding when the sender never opens the app again: the current
   contract only lets the sender's own wallet call `refund()`, so returns
   happen on their next visit. An owner-triggered refund needs a redeploy.
@@ -281,13 +290,14 @@ NextAuth on top (see the comment at the top of `lib/oauth.ts`).
 - In-app usernames: only YouTube/Kick handles can be tipped, so someone who
   hasn't linked a channel can't receive tips yet (anyone can link one --
   viewers on Profile, creators on the Creator page)
-- The bot/real breakdown dashboard (`bot_scores` table exists, nothing
-  populates it yet)
+- The bot/real breakdown dashboard and the bot filter for reward drops
+  (`bot_scores` table exists, nothing populates it yet)
 - Row Level Security *policies* in Supabase -- RLS itself is enabled on
   every table and the browser never talks to Supabase directly (only the
   server, with the service-role key); add narrow policies only if that
   changes
-- Hardening the escrow contract (two-step ownership, a claim-only role, a
-  claim delay/cap, owner-triggered refunds) -- needs a redeploy
+- Further escrow hardening (a per-claim cap or delay, two-step ownership).
+  Doesn't need a TipVault redeploy: make a small guard contract the owner and
+  let the Privy server wallet claim only through it.
 - Google profile pictures: Privy doesn't expose them, so avatars come from a
   linked channel and fall back to initials

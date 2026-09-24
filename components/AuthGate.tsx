@@ -12,7 +12,13 @@ import { AccountContext, type Mode, type PlatformLink } from "@/components/accou
 import { springs } from "@/components/motion";
 import { readError } from "@/lib/hooks";
 
-type Me = { mode: Mode | null; links: PlatformLink[]; avatarUrl: string | null };
+type Me = {
+  mode: Mode | null;
+  links: PlatformLink[];
+  avatarUrl: string | null;
+  profilePublic: boolean;
+  canWithdrawToAddress: boolean;
+};
 type SetupState = { status: "loading" } | { status: "error" } | { status: "ready"; me: Me };
 
 /**
@@ -90,6 +96,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     [getAccessToken, state, setMe]
   );
 
+  const setProfilePublic = useCallback(
+    async (profilePublic: boolean) => {
+      const token = await getAccessToken();
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ profilePublic }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      if (state.status === "ready") setMe({ ...state.me, profilePublic });
+    },
+    [getAccessToken, state, setMe]
+  );
+
   // Only the very first load shows the app skeleton.
   if (!ready) return <AppSkeleton />;
 
@@ -113,7 +133,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <AccountContext.Provider
-      value={{ mode: state.me.mode, links: state.me.links, avatarUrl: state.me.avatarUrl, setMode }}
+      value={{
+        mode: state.me.mode,
+        links: state.me.links,
+        avatarUrl: state.me.avatarUrl,
+        profilePublic: state.me.profilePublic ?? true,
+        canWithdrawToAddress: !!state.me.canWithdrawToAddress,
+        setMode,
+        setProfilePublic,
+      }}
     >
       {children}
     </AccountContext.Provider>

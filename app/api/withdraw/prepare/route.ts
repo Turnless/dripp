@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
-import { getAuthenticatedUser } from "@/lib/privy-server";
+import { getAuthenticatedPrivyId, getAuthenticatedUser } from "@/lib/privy-server";
+import { privyUserMayWithdrawToAddress } from "@/lib/withdraw-access";
 import { rateLimit } from "@/lib/rate-limit";
 import { WithdrawSchema, isExternalDestination, planWithdrawal } from "@/lib/withdraw-plan";
 import { centsToUnits } from "@/lib/chain";
@@ -10,8 +11,10 @@ import { getUsdcBalanceUnits } from "@/lib/wallet-server";
  * Step 1 of a withdrawal: returns the batched calls (1% fee to treasury +
  * payout) for the user's smart wallet to send. Nothing is recorded here.
  *
- * TODO(Mercuryo offramp): not called by the UI yet -- the Withdraw sheet
- * stays disabled until the offramp integration can supply `destination`.
+ * Until the offramp (Mercuryo) supplies the destination, the only caller is
+ * "withdraw to a wallet address", offered to the accounts allowed by
+ * lib/withdraw-access.ts. Confirm isn't gated: once money has moved it must
+ * always be recordable.
  */
 export async function POST(req: NextRequest) {
   const user = await getAuthenticatedUser(req);
@@ -20,6 +23,11 @@ export async function POST(req: NextRequest) {
   }
   const limited = await rateLimit(req, "withdraw", user.id);
   if (limited) return limited;
+
+  const privyId = await getAuthenticatedPrivyId(req);
+  if (!privyId || !(await privyUserMayWithdrawToAddress(privyId))) {
+    return NextResponse.json({ error: "Withdrawals aren't available for your account yet" }, { status: 403 });
+  }
 
   const parsed = WithdrawSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
