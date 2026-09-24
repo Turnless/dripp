@@ -9,16 +9,19 @@
  *     `useSmartWallets().client.sendTransaction({ calls })`), confirmed in the
  *     installed @privy-io/react-auth@1.99.1 type definitions and
  *     https://docs.privy.io/wallets/using-wallets/evm-smart-wallets/overview
- *   - Gas is sponsored by the bundler + paymaster configured for Monad in the
- *     Privy dashboard (custom chain; ZeroDev and Pimlico both list Monad
- *     mainnet at https://docs.monad.xyz/tooling-and-infra/account-abstraction/infra-providers).
+ *   - Gas is sponsored by the ERC-4337 bundler + paymaster configured for
+ *     Monad in the Privy dashboard (custom chain). Currently Pimlico -- see
+ *     https://docs.monad.xyz/tooling-and-infra/account-abstraction/infra-providers
+ *     for providers that support Monad mainnet. No bundler/paymaster URL or
+ *     key lives in this codebase.
  *   - The server never holds user keys. It only checks the resulting
  *     transaction's logs before recording anything, so history can't be faked.
  *
  * *** VERIFY BEFORE USE *** (runtime, not API shape)
- * Not yet exercised end to end: needs the Privy dashboard smart-wallet +
- * Monad custom-chain setup, ZeroDev bundler/paymaster URLs, a Monad RPC URL,
- * and a deployed TipVault. See README "Gas-free transfers setup".
+ * Sending tips (direct and into escrow) has been exercised end to end on
+ * Monad mainnet with this setup. Re-check against the Privy docs above
+ * before upgrading @privy-io/react-auth or changing the bundler/paymaster
+ * provider. See README "Gas-free transfers setup".
  */
 
 import {
