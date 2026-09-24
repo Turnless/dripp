@@ -9,6 +9,7 @@ import { CenterScreen, Wordmark } from "@/components/ui/misc";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { Landing } from "@/components/landing/Landing";
 import { AccountContext, type Mode, type PlatformLink } from "@/components/account";
+import type { ProfileVisibility } from "@/lib/profile-visibility";
 import { springs } from "@/components/motion";
 import { readError } from "@/lib/hooks";
 
@@ -16,7 +17,7 @@ type Me = {
   mode: Mode | null;
   links: PlatformLink[];
   avatarUrl: string | null;
-  profilePublic: boolean;
+  profileVisibility: ProfileVisibility;
   canWithdrawToAddress: boolean;
 };
 type SetupState = { status: "loading" } | { status: "error" } | { status: "ready"; me: Me };
@@ -96,16 +97,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     [getAccessToken, state, setMe]
   );
 
-  const setProfilePublic = useCallback(
-    async (profilePublic: boolean) => {
+  const setProfileVisibility = useCallback(
+    async (patch: Partial<ProfileVisibility>) => {
       const token = await getAccessToken();
       const res = await fetch("/api/me", {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ profilePublic }),
+        body: JSON.stringify({ profileVisibility: patch }),
       });
       if (!res.ok) throw new Error(await readError(res));
-      if (state.status === "ready") setMe({ ...state.me, profilePublic });
+      const { profileVisibility } = (await res.json()) as { profileVisibility: ProfileVisibility };
+      if (state.status === "ready") setMe({ ...state.me, profileVisibility });
     },
     [getAccessToken, state, setMe]
   );
@@ -137,10 +139,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         mode: state.me.mode,
         links: state.me.links,
         avatarUrl: state.me.avatarUrl,
-        profilePublic: state.me.profilePublic ?? true,
+        profileVisibility: state.me.profileVisibility,
         canWithdrawToAddress: !!state.me.canWithdrawToAddress,
         setMode,
-        setProfilePublic,
+        setProfileVisibility,
       }}
     >
       {children}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getAuthenticatedPrivyId, getAuthenticatedUser, privy } from "@/lib/privy-server";
 import { supabaseServer } from "@/lib/supabase";
 import { mayWithdrawToAddress } from "@/lib/withdraw-access";
+import { VisibilityPatchSchema, visibilityColumns, visibilityFromRow } from "@/lib/profile-visibility";
 import type { LinkedAccount } from "@privy-io/node";
 
 type LinkedAccountGoogleOAuth = Extract<LinkedAccount, { type: "google_oauth" }>;
@@ -71,8 +72,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Could not set up your account" }, { status: 500 });
   }
 
-  // "*" rather than naming profile_public, so sign-in keeps working if the
-  // app is deployed before supabase/migrate.sql adds that column.
+  // "*" rather than naming the show_* columns, so sign-in keeps working if
+  // the app is deployed before supabase/migrate.sql adds them.
   const { data: user, error } = legacy
     ? await db.from("users").update(fields).eq("id", legacy.id).select("*").single()
     : await db.from("users").upsert(fields, { onConflict: "privy_id" }).select("*").single();
@@ -93,14 +94,14 @@ export async function POST(req: NextRequest) {
     // Links from before channel IDs were stored need linking again.
     links: (links ?? []).map(({ channel_id, ...l }) => ({ ...l, needs_relink: !channel_id })),
     avatarUrl: links?.find((l) => l.avatar_url)?.avatar_url ?? null,
-    profilePublic: user.profile_public ?? true,
+    profileVisibility: visibilityFromRow(user),
     canWithdrawToAddress: mayWithdrawToAddress(google.email),
   });
 }
 
 const PatchSchema = z.union([
   z.object({ mode: z.enum(["viewer", "creator"]) }),
-  z.object({ profilePublic: z.boolean() }),
+  z.object({ profileVisibility: VisibilityPatchSchema }),
 ]);
 
 /**
@@ -108,7 +109,7 @@ const PatchSchema = z.union([
  * UI (see schema.sql), and it can't be changed afterwards: only an account
  * without a mode yet can set one.
  *
- * Also switches the public profile page (/u/<handle>) on or off.
+ * Also sets what the public profile page (/u/<handle>) shows.
  */
 export async function PATCH(req: NextRequest) {
   const user = await getAuthenticatedUser(req);
@@ -121,16 +122,18 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Choose viewer or creator" }, { status: 400 });
   }
 
-  if ("profilePublic" in parsed.data) {
-    const { error } = await supabaseServer()
+  if ("profileVisibility" in parsed.data) {
+    const { data: row, error } = await supabaseServer()
       .from("users")
-      .update({ profile_public: parsed.data.profilePublic })
-      .eq("id", user.id);
-    if (error) {
-      console.error("users profile_public update failed", error);
+      .update(visibilityColumns(parsed.data.profileVisibility))
+      .eq("id", user.id)
+      .select("*")
+      .single();
+    if (error || !row) {
+      console.error("users profile visibility update failed", error);
       return NextResponse.json({ error: "Could not save that. Please try again." }, { status: 500 });
     }
-    return NextResponse.json({ profilePublic: parsed.data.profilePublic });
+    return NextResponse.json({ profileVisibility: visibilityFromRow(row) });
   }
 
   const { data: updated, error } = await supabaseServer()
