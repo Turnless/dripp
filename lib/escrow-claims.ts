@@ -1,3 +1,4 @@
+import "server-only";
 import { getAddress } from "viem";
 import { supabaseServer } from "./supabase";
 import { handleHash } from "./tipvault";

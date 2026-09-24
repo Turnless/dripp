@@ -24,6 +24,7 @@
  * provider. See README "Gas-free transfers setup".
  */
 
+import "server-only";
 import {
   TransactionNotFoundError,
   TransactionReceiptNotFoundError,
@@ -39,9 +40,14 @@ import { privateKeyToAccount } from "viem/accounts";
 import { monad, USDC_ADDRESS, minimalErc20Abi } from "./chain";
 import { tipVaultAbi, tipVaultAddress } from "./tipvault";
 
+// Server-side RPC. MONAD_RPC_URL (server-only) wins when set -- use it for an
+// RPC URL that carries an API key, which must never reach the browser.
+// Otherwise the public NEXT_PUBLIC_MONAD_RPC_URL (the chain default) is used.
+const serverTransport = () => http(process.env.MONAD_RPC_URL || undefined);
+
 export const publicClient = createPublicClient({
   chain: monad,
-  transport: http(),
+  transport: serverTransport(),
 });
 
 const same = (a: string, b: string) => getAddress(a) === getAddress(b);
@@ -182,7 +188,7 @@ export async function sendEscrowClaim(
   const wallet = createWalletClient({
     account: privateKeyToAccount(key),
     chain: monad,
-    transport: http(),
+    transport: serverTransport(),
   });
   return wallet.writeContract({
     address: vault,
