@@ -10,9 +10,16 @@ describe("platform-link OAuth state", () => {
     process.env.OAUTH_STATE_SECRET = "test-secret-that-is-at-least-32-characters-long";
   });
 
-  it("round-trips the user id with the matching browser cookie", () => {
+  it("round-trips the user id and return page with the matching browser cookie", () => {
     const { state, nonce } = signState("user-1");
-    expect(verifyState(state, nonce)).toEqual({ userId: "user-1" });
+    expect(verifyState(state, nonce)).toEqual({ userId: "user-1", returnTo: "/profile" });
+    const creator = signState("user-1", "/creator");
+    expect(verifyState(creator.state, creator.nonce)).toEqual({ userId: "user-1", returnTo: "/creator" });
+  });
+
+  it("only ever returns to the Creator page or Profile", () => {
+    const { state, nonce } = signState("user-1", "https://evil.example" as never);
+    expect(verifyState(state, nonce)?.returnTo).toBe("/profile");
   });
 
   it("rejects a missing or different cookie (link started in another browser)", () => {
@@ -45,7 +52,7 @@ describe("platform-link OAuth state", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
     const { state, nonce } = signState("user-1");
     vi.setSystemTime(new Date("2026-01-01T00:09:59Z"));
-    expect(verifyState(state, nonce)).toEqual({ userId: "user-1" });
+    expect(verifyState(state, nonce)?.userId).toBe("user-1");
     vi.setSystemTime(new Date("2026-01-01T00:10:01Z"));
     expect(verifyState(state, nonce)).toBeNull();
   });

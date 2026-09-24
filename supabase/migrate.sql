@@ -140,6 +140,23 @@ create table if not exists rate_limits (
   count integer not null
 );
 
+-- 4e. channel-ID identity, avatars, escrow keys, refunds -------------------
+alter table platform_links add column if not exists channel_id text;
+alter table platform_links add column if not exists avatar_url text;
+create unique index if not exists platform_links_platform_channel_id_key
+  on platform_links (platform, channel_id);
+
+alter table pending_tips add column if not exists handle_hash text;
+alter table pending_tips add column if not exists refunded_at timestamptz;
+alter table pending_tips add column if not exists refund_tx_hash text;
+
+alter table escrow_claims add column if not exists handle_hash text;
+alter table escrow_claims add column if not exists legacy_handle boolean not null default false;
+
+alter table chain_logs drop constraint if exists chain_logs_kind_check;
+alter table chain_logs add constraint chain_logs_kind_check
+  check (kind in ('tip', 'escrow_deposit', 'escrow_refund', 'withdrawal_fee', 'withdrawal_payout'));
+
 -- 5. live tip alerts for the overlay -------------------------------------
 do $$ begin
   alter publication supabase_realtime add table tips;

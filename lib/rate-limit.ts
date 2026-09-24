@@ -26,6 +26,8 @@ export const LIMITS = {
   balance: { perUser: 60, perIp: 300, windowSeconds: 60 },
   withdraw: { perUser: 20, perIp: 100, windowSeconds: 60 },
   platformLink: { perUser: 10, perIp: 50, windowSeconds: 60 },
+  // Checked once per app load; confirm is retried like tip confirm.
+  refunds: { perUser: 30, perIp: 150, windowSeconds: 60 },
 } satisfies Record<string, Limit>;
 
 function clientIp(req: Request): string | null {

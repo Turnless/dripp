@@ -44,6 +44,15 @@ contract TipVaultTest is Test {
         );
     }
 
+    /// Channel-ID escrow key (lib/tipvault.ts channelKey), asserted in
+    /// tests/money.test.ts too.
+    function test_channelKey_matchesTheApp() public pure {
+        assertEq(
+            keccak256(abi.encodePacked("youtube", "#", "UCabc123")),
+            0x28665104ac78382eafc46f9456552d248ade2338c7f3d48969aabc6582449b53
+        );
+    }
+
     // ---------- deposit + claim ----------
 
     function test_depositPending_increasesBalance() public {

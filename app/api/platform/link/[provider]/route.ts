@@ -55,7 +55,10 @@ export async function POST(
     return NextResponse.json({ error: "Unknown provider" }, { status: 400 });
   }
 
-  const { state, nonce } = signState(user.id);
+  // Back to the page linking started from (Creator page for creators,
+  // Profile for everyone else).
+  const from = req.nextUrl.searchParams.get("from") === "creator" ? "/creator" : "/profile";
+  const { state, nonce } = signState(user.id, from);
   url.searchParams.set("state", state);
 
   const res = NextResponse.json({ url: url.toString() });

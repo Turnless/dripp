@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { encodeFunctionData, getAddress } from "viem";
 import { USDC_ADDRESS, centsToUnits, minimalErc20Abi } from "./chain";
-import { handleHash, tipVaultAbi, tipVaultAddress } from "./tipvault";
+import { channelKey, tipVaultAbi, tipVaultAddress } from "./tipvault";
 import { normalizeHandle, resolveRecipient } from "./username-resolve";
 
 // Upper bound per tip -- limits the damage of a compromised session or a
@@ -76,7 +76,8 @@ export async function planTip(senderId: string, input: TipInput): Promise<TipPla
   if (!vault) {
     return { error: "Tipping people who haven't joined yet isn't available yet", status: 501 };
   }
-  const hash = handleHash(recipient.platform, recipient.platformUsername);
+  // Escrowed under the channel's permanent ID, not the handle.
+  const hash = channelKey(recipient.platform, recipient.channelId);
   return {
     kind: "escrow",
     platform: recipient.platform,

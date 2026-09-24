@@ -16,6 +16,8 @@ type LinkedAccountSmartWallet = Extract<LinkedAccount, { type: "smart_wallet" }>
  * from the request body, so a caller can't register someone else's wallet.
  *
  * Returns what the UI needs about the account -- never the wallet address.
+ * The avatar comes from a linked channel's profile picture (Privy doesn't
+ * provide the Google photo); the UI shows initials when there's none.
  */
 export async function POST(req: NextRequest) {
   const privyId = await getAuthenticatedPrivyId(req);
@@ -79,15 +81,24 @@ export async function POST(req: NextRequest) {
 
   const { data: links } = await db
     .from("platform_links")
-    .select("platform, platform_username")
-    .eq("user_id", user.id);
+    .select("platform, platform_username, avatar_url")
+    .eq("user_id", user.id)
+    .order("verified_at", { ascending: false });
 
-  return NextResponse.json({ mode: user.mode ?? null, links: links ?? [] });
+  return NextResponse.json({
+    mode: user.mode ?? null,
+    links: links ?? [],
+    avatarUrl: links?.find((l) => l.avatar_url)?.avatar_url ?? null,
+  });
 }
 
 const PatchSchema = z.object({ mode: z.enum(["viewer", "creator"]) });
 
-/** Saves the viewer/creator choice. It only tailors the UI -- see schema.sql. */
+/**
+ * Saves the viewer/creator choice, made once at sign-up. It only tailors the
+ * UI (see schema.sql), and it can't be changed afterwards: only an account
+ * without a mode yet can set one.
+ */
 export async function PATCH(req: NextRequest) {
   const user = await getAuthenticatedUser(req);
   if (!user) {
@@ -99,13 +110,18 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Choose viewer or creator" }, { status: 400 });
   }
 
-  const { error } = await supabaseServer()
+  const { data: updated, error } = await supabaseServer()
     .from("users")
     .update({ mode: parsed.data.mode })
-    .eq("id", user.id);
+    .eq("id", user.id)
+    .is("mode", null)
+    .select("mode");
   if (error) {
     console.error("users mode update failed", error);
     return NextResponse.json({ error: "Could not save that. Please try again." }, { status: 500 });
+  }
+  if (!updated?.length) {
+    return NextResponse.json({ error: "You've already chosen how you use dripp." }, { status: 409 });
   }
 
   return NextResponse.json({ mode: parsed.data.mode });

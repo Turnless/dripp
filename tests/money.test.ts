@@ -3,7 +3,7 @@ import { centsToUnits, unitsToCents, USDC_DECIMALS } from "@/lib/chain";
 import { parseUsdToCents } from "@/lib/format";
 import { withdrawalFee } from "@/lib/fees";
 import { TipSchema } from "@/lib/tip-plan";
-import { handleHash } from "@/lib/tipvault";
+import { channelKey, handleHash } from "@/lib/tipvault";
 import { normalizeHandle } from "@/lib/username-resolve";
 
 describe("USDC units", () => {
@@ -84,6 +84,13 @@ describe("handleHash", () => {
     expect(handleHash("kick", "somecreator")).toBe(
       "0xf86f51406bb7248862de01f466579977b833670b4868262be47c0d68e6be54a4"
     );
+  });
+
+  it("matches the Solidity channel key, and never equals a handle key", () => {
+    expect(channelKey("youtube", "UCabc123")).toBe(
+      "0x28665104ac78382eafc46f9456552d248ade2338c7f3d48969aabc6582449b53"
+    );
+    expect(channelKey("youtube", "somecreator")).not.toBe(handleHash("youtube", "somecreator"));
   });
 
   it("is the same for every spelling of a handle after normalizing", () => {

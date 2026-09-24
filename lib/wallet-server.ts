@@ -30,6 +30,7 @@ import {
   TransactionReceiptNotFoundError,
   createPublicClient,
   createWalletClient,
+  encodeFunctionData,
   getAddress,
   http,
   parseAbiItem,
@@ -39,6 +40,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { monad, USDC_ADDRESS, minimalErc20Abi } from "./chain";
 import { tipVaultAbi, tipVaultAddress } from "./tipvault";
+import { privy } from "./privy-server";
 
 // Server-side RPC. MONAD_RPC_URL (server-only) wins when set -- use it for an
 // RPC URL that carries an API key, which must never reach the browser.
@@ -164,18 +166,23 @@ export async function findEscrowDeposits(
 
 /**
  * Sends TipVault.claim, releasing everything escrowed for `hash` to
- * `recipient`. Signed by the backend-owned TipVault owner key -- only call
- * after OAuth proved the recipient owns the handle. Returns the transaction
- * hash without waiting for it (see readEscrowClaim), or null if nothing is
- * escrowed.
+ * `recipient`. Only call after OAuth proved the recipient owns the channel.
+ * Returns the transaction hash without waiting for it (see readEscrowClaim),
+ * or null if nothing is escrowed.
+ *
+ * Signed by the TipVault owner, one of:
+ *   - a Privy server wallet (PRIVY_CLAIM_WALLET_ID) -- preferred: the key
+ *     never exists in this app's environment, and a Privy policy on the
+ *     wallet can allow nothing but TipVault.claim;
+ *   - otherwise a raw private key (TIPVAULT_OWNER_PRIVATE_KEY).
+ * See README "Escrow claim signer".
  */
 export async function sendEscrowClaim(
   hash: `0x${string}`,
   recipient: `0x${string}`
 ): Promise<Hash | null> {
   const vault = tipVaultAddress();
-  const key = process.env.TIPVAULT_OWNER_PRIVATE_KEY as `0x${string}` | undefined;
-  if (!vault || !key) throw new Error("TipVault is not configured");
+  if (!vault) throw new Error("TipVault is not configured");
 
   const pending = await publicClient.readContract({
     address: vault,
@@ -185,6 +192,11 @@ export async function sendEscrowClaim(
   });
   if (pending === BigInt(0)) return null;
 
+  const privyWalletId = process.env.PRIVY_CLAIM_WALLET_ID;
+  if (privyWalletId) return sendClaimWithPrivyWallet(privyWalletId, vault, hash, recipient);
+
+  const key = process.env.TIPVAULT_OWNER_PRIVATE_KEY as `0x${string}` | undefined;
+  if (!key) throw new Error("No escrow claim signer is configured");
   const wallet = createWalletClient({
     account: privateKeyToAccount(key),
     chain: monad,
@@ -196,6 +208,38 @@ export async function sendEscrowClaim(
     functionName: "claim",
     args: [hash, recipient],
   });
+}
+
+/**
+ * *** VERIFY BEFORE USE *** -- written against the installed @privy-io/node
+ * types (wallets().ethereum().sendTransaction, authorization_context), not
+ * yet exercised against a live Privy server wallet. Test one claim before
+ * moving TipVault ownership to the wallet.
+ */
+async function sendClaimWithPrivyWallet(
+  walletId: string,
+  vault: `0x${string}`,
+  hash: `0x${string}`,
+  recipient: `0x${string}`
+): Promise<Hash> {
+  // The wallet's authorization key, if it has an owner (recommended): base64
+  // PKCS8 private key, as shown when the key is created in the Privy dashboard.
+  const authKey = process.env.PRIVY_CLAIM_AUTHORIZATION_KEY;
+  const res = await privy()
+    .wallets()
+    .ethereum()
+    .sendTransaction(walletId, {
+      caip2: `eip155:${monad.id}`,
+      params: {
+        transaction: {
+          to: vault,
+          data: encodeFunctionData({ abi: tipVaultAbi, functionName: "claim", args: [hash, recipient] }),
+          chain_id: monad.id,
+        },
+      },
+      ...(authKey ? { authorization_context: { authorization_private_keys: [authKey] } } : {}),
+    });
+  return res.hash as Hash;
 }
 
 export type ClaimResult =
@@ -228,6 +272,55 @@ export async function readEscrowClaim(
   };
 }
 
+// ---- Refunds (TipVault.refund, sent by the sender's own smart wallet) ----
+
+/** What `sender` could take back for escrow key `hash`, and from when (unix seconds). */
+export async function refundableOf(
+  hash: `0x${string}`,
+  sender: `0x${string}`
+): Promise<{ units: bigint; availableAt: bigint }> {
+  const vault = tipVaultAddress();
+  if (!vault) throw new Error("TipVault is not configured");
+  const [units, availableAt] = await publicClient.readContract({
+    address: vault,
+    abi: tipVaultAbi,
+    functionName: "refundableOf",
+    args: [hash, sender],
+  });
+  return { units, availableAt };
+}
+
+export type RefundLog = { handleHash: `0x${string}`; units: bigint; logIndex: number; blockNumber: bigint };
+
+/**
+ * The PendingTipRefunded logs `sender` produced in `txHash`: pending while
+ * our node hasn't seen it, missing if it was mined without any.
+ */
+export async function findRefunds(
+  txHash: Hash,
+  sender: string,
+  waitMs = RECEIPT_WAIT_MS
+): Promise<{ status: "pending" } | { status: "missing" } | { status: "found"; refunds: RefundLog[] }> {
+  const vault = tipVaultAddress();
+  if (!vault) throw new Error("TipVault is not configured");
+  const receipt = await receiptOrPending(txHash, waitMs);
+  if (receipt === "pending") return { status: "pending" };
+  if (receipt.status !== "success") return { status: "missing" };
+  const refunds = parseEventLogs({
+    abi: tipVaultAbi,
+    eventName: "PendingTipRefunded",
+    logs: receipt.logs.filter((l) => same(l.address, vault)),
+  })
+    .filter((r) => same(r.args.sender, sender))
+    .map((r) => ({
+      handleHash: r.args.handleHash,
+      units: r.args.amount,
+      logIndex: r.logIndex,
+      blockNumber: receipt.blockNumber,
+    }));
+  return refunds.length ? { status: "found", refunds } : { status: "missing" };
+}
+
 // ---- Log scans, for the reconcile job (app/api/cron/reconcile) ----------
 
 const transferEvent = parseAbiItem(
@@ -235,6 +328,9 @@ const transferEvent = parseAbiItem(
 );
 const depositEvent = parseAbiItem(
   "event PendingTipDeposited(bytes32 indexed handleHash, address indexed sender, uint256 amount)"
+);
+const refundEvent = parseAbiItem(
+  "event PendingTipRefunded(bytes32 indexed handleHash, address indexed sender, uint256 amount)"
 );
 
 /** USDC transfers sent by any of `senders` in the block range (inclusive). */
@@ -257,4 +353,11 @@ export async function escrowDepositsBetween(fromBlock: bigint, toBlock: bigint) 
   const vault = tipVaultAddress();
   if (!vault) return [];
   return publicClient.getLogs({ address: vault, event: depositEvent, fromBlock, toBlock });
+}
+
+/** TipVault refunds in the block range (inclusive). */
+export async function escrowRefundsBetween(fromBlock: bigint, toBlock: bigint) {
+  const vault = tipVaultAddress();
+  if (!vault) return [];
+  return publicClient.getLogs({ address: vault, event: refundEvent, fromBlock, toBlock });
 }
