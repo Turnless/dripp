@@ -190,8 +190,12 @@ Two options, set in env vars (see `.env.example`):
   2. Attach a policy that allows only transactions to your TipVault address
      calling `claim`, on Monad mainnet, and denies everything else.
   3. Fund the wallet with a little MON (it pays gas for claims).
-  4. From the current owner, call `transferOwnership(<server wallet address>)`
-     on TipVault.
+  4. Move TipVault ownership to the server wallet, signed once by the
+     current owner key (from `.env.local`):
+     `node scripts/transfer-tipvault-ownership.mjs <server wallet address>`.
+     It checks the key is the current owner and the address is valid, asks
+     you to type the end of the address, sends the transfer and reads the
+     new owner back. This can't be undone by the old key.
   5. Set `PRIVY_CLAIM_WALLET_ID` and `PRIVY_CLAIM_AUTHORIZATION_KEY`
      (Production only), redeploy, and link a test channel with a small
      escrowed tip to check a claim goes through. Then remove
