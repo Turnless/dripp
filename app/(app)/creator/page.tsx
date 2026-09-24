@@ -64,8 +64,8 @@ export default function CreatorPage() {
   }
 
   return (
-    <Stagger className="flex flex-col gap-6">
-      <StaggerItem>
+    <Stagger className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start xl:gap-x-8">
+      <StaggerItem className="xl:col-span-2">
         <h1 className="text-title-1">Creator</h1>
       </StaggerItem>
 
@@ -106,7 +106,7 @@ export default function CreatorPage() {
       </StaggerItem>
 
       {/* Bot/real breakdown of the last 30 days' tippers */}
-      <StaggerItem>
+      <StaggerItem className="xl:row-span-2">
         <TipperBreakdownCard />
       </StaggerItem>
 
@@ -151,7 +151,7 @@ export default function CreatorPage() {
       </StaggerItem>
 
       {/* Reward viewers (bulk send) */}
-      <StaggerItem>
+      <StaggerItem className="xl:col-span-2">
         <div className="flex flex-col gap-4 rounded-card bg-brand p-6 text-text sm:flex-row sm:items-center">
           <div className="flex-1">
             <h2 className="text-title-2">Reward your viewers</h2>

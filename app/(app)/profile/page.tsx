@@ -32,10 +32,13 @@ export default function ProfilePage() {
   const ModeIcon = creator ? Radio : HeartHandshake;
 
   return (
-    <Stagger className="flex flex-col gap-6">
-      <StaggerItem>
+    <Stagger className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start xl:gap-x-8">
+      <StaggerItem className="xl:col-span-2">
         <h1 className="text-title-1">Profile</h1>
       </StaggerItem>
+
+      {/* Desktop: who you are on the left, settings on the right */}
+      <div className="flex flex-col gap-6">
 
       <StaggerItem>
         <GlassCard className="flex items-center gap-4 p-5">
@@ -65,7 +68,9 @@ export default function ProfilePage() {
           />
         </StaggerItem>
       )}
+      </div>
 
+      <div className="flex flex-col gap-6">
       {username && (
         <StaggerItem>
           <GlassCard className="overflow-hidden">
@@ -132,6 +137,7 @@ export default function ProfilePage() {
           <LogOut className="h-5 w-5" aria-hidden /> Sign out
         </Button>
       </StaggerItem>
+      </div>
 
       <VisibilitySheet open={visibilityOpen} onClose={() => setVisibilityOpen(false)} />
       <UsernameSheet open={usernameOpen} onClose={() => setUsernameOpen(false)} />

@@ -10,6 +10,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Stagger, StaggerItem, springs } from "@/components/motion";
 import { useActivity, type ActivityItem } from "@/lib/money-client";
+import { formatUsd } from "@/lib/format";
 
 const FILTERS = ["All", "Sent", "Received", "Waiting"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -48,9 +49,10 @@ export default function ActivityPage() {
   }, [data, filter]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-title-1">Activity</h1>
+    <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start xl:gap-x-8">
+      <h1 className="text-title-1 xl:col-span-2">Activity</h1>
 
+      <div className="flex min-w-0 flex-col gap-6">
       <div role="tablist" aria-label="Filter activity" className="flex gap-1 self-start rounded-full bg-deep/[0.05] p-1">
         {FILTERS.map((f) => (
           <button
@@ -120,6 +122,57 @@ export default function ActivityPage() {
           ))}
         </Stagger>
       )}
+      </div>
+
+      {/* Desktop side column */}
+      <div className="hidden xl:sticky xl:top-10 xl:block">
+        <Totals items={data} onSend={openSend} />
+      </div>
     </div>
+  );
+}
+
+/** Desktop: totals for the history loaded on this page (the latest 100 entries). */
+function Totals({ items, onSend }: { items: ActivityItem[] | null; onSend: () => void }) {
+  const t = useMemo(() => {
+    const sum = (f: (i: ActivityItem) => boolean) => (items ?? []).filter(f).reduce((n, i) => n + i.cents, 0);
+    return {
+      received: sum((i) => i.direction === "received"),
+      added: sum((i) => i.direction === "added"),
+      sent: sum((i) => i.direction === "sent" && i.status !== "waiting" && i.status !== "returned"),
+      waiting: sum((i) => i.status === "waiting"),
+      withdrawn: sum((i) => i.direction === "withdrawn"),
+    };
+  }, [items]);
+  const rows = [
+    { label: "Tips received", cents: t.received, tone: "text-positive" },
+    { label: "Added", cents: t.added, tone: "" },
+    { label: "Tips sent", cents: t.sent, tone: "" },
+    { label: "Waiting for people to join", cents: t.waiting, tone: "" },
+    { label: "Withdrawn", cents: t.withdrawn, tone: "" },
+  ].filter((r, i) => i === 0 || i === 2 || r.cents > 0);
+
+  return (
+    <GlassCard className="flex flex-col gap-4 p-5">
+      <div>
+        <h2 className="font-bold">Totals</h2>
+        <p className="text-caption text-muted">Across the history shown here</p>
+      </div>
+      {items === null ? (
+        <Skeleton className="h-32 w-full" />
+      ) : (
+        <dl className="flex flex-col divide-y divide-deep/5">
+          {rows.map((r) => (
+            <div key={r.label} className="flex items-baseline justify-between gap-4 py-2.5">
+              <dt className="text-[0.9375rem] text-muted">{r.label}</dt>
+              <dd className={`num font-extrabold ${r.tone}`}>{formatUsd(r.cents)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <Button fullWidth onClick={onSend}>
+        Send a tip
+      </Button>
+    </GlassCard>
   );
 }
