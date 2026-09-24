@@ -190,7 +190,7 @@ export function ModePicker({ onPick }: { onPick: (mode: Mode) => Promise<void> }
               >
                 <span
                   className={`grid h-12 w-12 place-items-center rounded-2xl transition-colors ${
-                    selected ? "bg-primary text-white" : "bg-tint text-emphasis"
+                    selected ? "bg-primary text-on-primary" : "bg-tint text-emphasis"
                   }`}
                 >
                   <m.icon className="h-6 w-6" strokeWidth={1.75} aria-hidden />
@@ -206,7 +206,7 @@ export function ModePicker({ onPick }: { onPick: (mode: Mode) => Promise<void> }
                       animate={{ scale: 1, opacity: 1 }}
                       exit={{ scale: 0.4, opacity: 0 }}
                       transition={springs.soft}
-                      className="absolute right-4 top-4 grid h-7 w-7 place-items-center rounded-full bg-primary text-white"
+                      className="absolute right-4 top-4 grid h-7 w-7 place-items-center rounded-full bg-primary text-on-primary"
                     >
                       <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
                     </motion.span>

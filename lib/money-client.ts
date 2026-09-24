@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { readError, useAuthedFetch } from "@/lib/hooks";
-import type { ActivityItem } from "@/app/api/activity/route";
+import type { ActivityItem, WeekSummary } from "@/app/api/activity/route";
 
 export type { ActivityItem };
 
@@ -249,6 +249,14 @@ export function useBalance() {
 
 export function useActivity(limit = 50) {
   return useMoneyQuery(`/api/activity?limit=${limit}`, (j) => j.items as ActivityItem[]);
+}
+
+/** Recent activity plus what came in over the last 7 days, for the Money screen. */
+export function useRecentWithWeek(limit = 5) {
+  return useMoneyQuery(`/api/activity?limit=${limit}&week=1`, (j) => ({
+    items: j.items as ActivityItem[],
+    week: j.week as WeekSummary,
+  }));
 }
 
 export type ReturnedTips = { cents: number; handles: string[] };

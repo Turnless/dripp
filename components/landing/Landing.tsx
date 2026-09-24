@@ -178,7 +178,7 @@ export function Landing() {
             <h1 className="text-[clamp(2.7rem,7.2vw,4.75rem)] font-semibold leading-[1.02] tracking-[-0.045em]">
               <WordsIn text="Tip any creator." />
               <br />
-              <WordsIn text="It arrives in a second." wordClassName="text-gradient pr-[0.04em]" delay={0.2} />
+              <WordsIn text="It arrives in a second." wordClassName="text-highlight" delay={0.2} />
             </h1>
             <Reveal delay={0.35}>
               <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">
@@ -251,7 +251,7 @@ export function Landing() {
             <Stagger inView as="ol" className="grid gap-10 md:grid-cols-3">
               {STEPS.map((s, i) => (
                 <StaggerItem as="li" key={s.title} className="relative flex flex-col items-center text-center">
-                  <span className="bg-brand-gradient relative grid h-14 w-14 place-items-center rounded-2xl text-white shadow-primary">
+                  <span className="relative grid h-14 w-14 place-items-center rounded-2xl bg-brand text-text shadow-primary">
                     <s.icon className="h-6 w-6" strokeWidth={1.9} aria-hidden />
                   </span>
                   <span className="mt-5 text-label uppercase text-emphasis">Step {i + 1}</span>
@@ -289,7 +289,7 @@ export function Landing() {
                 <h2 className="mt-3 text-[clamp(1.9rem,4vw,2.75rem)] font-semibold leading-[1.08] tracking-[-0.035em]">
                   Tipping is free.
                   <br />
-                  <span className="text-gradient">You only pay {WITHDRAWAL_FEE_PERCENT} when you withdraw.</span>
+                  <span className="text-highlight">You only pay {WITHDRAWAL_FEE_PERCENT} when you withdraw.</span>
                 </h2>
                 <p className="mt-4 max-w-md leading-relaxed text-muted">
                   A $2 tip shouldn&apos;t lose part of itself on the way. So we don&apos;t charge
@@ -321,7 +321,7 @@ export function Landing() {
         <section className="mx-auto max-w-6xl px-4 pb-24 pt-8 sm:px-8">
           <Reveal>
             <div className="bg-brand-gradient relative overflow-hidden rounded-sheet px-8 py-20 text-center text-white shadow-primary">
-              <span aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-white/20 blur-3xl" />
+              <span aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-brand/15 blur-3xl" />
               <h2 className="relative text-[clamp(2rem,4.5vw,3rem)] font-semibold tracking-[-0.035em]">
                 Send your first tip in under a minute.
               </h2>
@@ -331,7 +331,7 @@ export function Landing() {
               <div className="relative mt-8">
                 <button
                   onClick={login}
-                  className="pressable inline-flex h-14 items-center gap-2 rounded-full bg-white px-7 font-semibold text-primary shadow-[0_10px_30px_rgba(32,0,82,0.25)] hover:bg-white/90"
+                  className="pressable inline-flex h-14 items-center gap-2 rounded-full bg-brand px-7 font-semibold text-text shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:brightness-105"
                 >
                   Get started <ArrowRight className="h-5 w-5" aria-hidden />
                 </button>
@@ -541,7 +541,7 @@ function LiveDemo() {
             initial={reduce ? false : { y: 8, opacity: 0.4 }}
             animate={{ y: 0, opacity: 1 }}
             transition={springs.snappy}
-            className="num mt-1 text-[2.5rem] font-semibold leading-none tracking-[-0.03em]"
+            className="num mt-1 text-[2.5rem] font-extrabold leading-none tracking-[-0.045em] text-brand"
           >
             {formatUsd(total)}
           </motion.p>
@@ -557,7 +557,7 @@ function LiveDemo() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={springs.default}
-                className="flex items-center gap-3 rounded-chip bg-solid/80 p-3 shadow-[0_1px_2px_rgba(32,0,82,0.05)]"
+                className="flex items-center gap-3 rounded-chip bg-solid/80 p-3 shadow-[0_1px_2px_rgba(17,17,17,0.05)]"
               >
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-tint text-[0.875rem] font-semibold text-emphasis">
                   {t.name.charAt(0).toUpperCase()}
@@ -580,7 +580,7 @@ function Stat({ value, label }: { value: React.ReactNode; label: string }) {
   return (
     <StaggerItem>
       <GlassCard className="p-7">
-        <p className="num text-gradient text-[3.25rem] font-semibold leading-none tracking-[-0.045em]">{value}</p>
+        <p className="num text-[3.25rem] font-extrabold leading-none tracking-[-0.055em]">{value}</p>
         <p className="mt-3 text-muted">{label}</p>
       </GlassCard>
     </StaggerItem>
@@ -653,13 +653,13 @@ function TimelineItem({
       transition={springs.soft}
       whileHover={reduce ? undefined : { y: -4 }}
       className={`${side === "left" ? "card-wash" : "card-wash-alt"} relative rounded-card p-6 transition-shadow duration-300 md:p-7 ${
-        active ? "shadow-[0_20px_50px_rgba(109,90,240,0.18)]" : ""
+        active ? "shadow-[0_20px_50px_rgba(17,17,17,0.14)]" : ""
       }`}
     >
       <div className="flex items-center justify-between gap-3">
         <span
           className={`grid h-11 w-11 place-items-center rounded-2xl transition-colors duration-300 ${
-            active ? "bg-brand-gradient text-white shadow-primary" : "bg-tint text-emphasis"
+            active ? "bg-brand text-text shadow-primary" : "bg-tint text-emphasis"
           }`}
         >
           <f.icon className="h-5 w-5" strokeWidth={1.9} aria-hidden />
@@ -699,7 +699,7 @@ function TimelineItem({
         transition={springs.snappy}
         className={`relative h-4 w-4 rounded-full border-[3px] border-white transition-colors duration-300 ${
           active || seen ? "bg-primary" : "bg-deep/20"
-        } shadow-[0_0_0_4px_rgba(131,110,249,0.18)]`}
+        } shadow-[0_0_0_4px_rgba(255,210,63,0.35)]`}
       />
     </span>
   );
@@ -783,7 +783,7 @@ function WhyCard({ item, index }: { item: (typeof WHY)[number]; index: number })
 
   return (
     // drop-shadow follows the clipped shape (box-shadow would be cut off).
-    <div className="[filter:drop-shadow(0_24px_40px_rgba(32,0,82,0.28))]">
+    <div className="[filter:drop-shadow(0_24px_40px_rgba(17,17,17,0.28))]">
       <article className="relative aspect-[3/4] w-full overflow-hidden text-white" style={{ clipPath: "url(#tab-card)" }}>
         <Image src={item.image} alt={item.alt} fill sizes="(min-width: 1024px) 340px, 80vw" className="object-cover" />
         <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-deep/90 via-deep/25 to-transparent" />
@@ -859,7 +859,7 @@ function AudienceSwitch() {
               aria-selected={tab === t}
               onClick={() => setTab(t)}
               className={`pressable relative h-10 rounded-full px-6 text-[0.9375rem] font-semibold ${
-                tab === t ? "text-white" : "text-muted hover:text-text"
+                tab === t ? "text-on-primary" : "text-muted hover:text-text"
               }`}
             >
               {tab === t && (
@@ -911,7 +911,7 @@ function AudienceSwitch() {
           transition={{ ...springs.soft, delay: 0.3 }}
           className="glass absolute bottom-5 left-5 right-5 flex items-center gap-3 rounded-card p-4 sm:right-auto"
         >
-          <span className="bg-brand-gradient grid h-10 w-10 place-items-center rounded-full text-white">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-brand text-text">
             <Zap className="h-5 w-5" aria-hidden />
           </span>
           <div>
@@ -949,7 +949,7 @@ function FaqSection({ onLogin }: { onLogin: () => void }) {
           <h2 className="mt-3 text-[clamp(2rem,4.6vw,3.15rem)] font-semibold leading-[1.06] tracking-[-0.04em]">
             Questions,
             <br />
-            <span className="text-gradient">answered.</span>
+            <span className="text-highlight">answered.</span>
           </h2>
           <p className="mt-4 max-w-sm leading-relaxed text-muted">
             The short version: tips are free, they arrive in about a second, and creators
@@ -958,7 +958,7 @@ function FaqSection({ onLogin }: { onLogin: () => void }) {
         </Reveal>
         <Reveal delay={0.1}>
           <div className="card-wash mt-8 flex items-center gap-4 rounded-card p-5">
-            <span className="bg-brand-gradient grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white shadow-primary">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand text-text shadow-primary">
               <Zap className="h-5 w-5" aria-hidden />
             </span>
             <div className="flex-1">
@@ -1009,7 +1009,7 @@ function FaqItem({
       layout={!reduce}
       transition={springs.snappy}
       className={`${index % 2 === 0 ? "card-wash" : "card-wash-alt"} relative overflow-hidden rounded-card transition-shadow duration-300 ${
-        open ? "shadow-[0_18px_44px_rgba(109,90,240,0.16)] ring-1 ring-brand/35" : "hover:ring-1 hover:ring-brand/20"
+        open ? "shadow-[0_18px_44px_rgba(17,17,17,0.12)] ring-1 ring-text/15" : "hover:ring-1 hover:ring-text/10"
       }`}
     >
       {/* Soft glow that appears behind the open card */}
@@ -1027,7 +1027,7 @@ function FaqItem({
       >
         <span
           className={`num grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[0.8125rem] font-semibold transition-colors duration-300 ${
-            open ? "bg-brand-gradient text-white shadow-primary" : "bg-white/80 text-emphasis"
+            open ? "bg-brand text-text shadow-primary" : "bg-white/80 text-emphasis"
           }`}
         >
           {String(index + 1).padStart(2, "0")}

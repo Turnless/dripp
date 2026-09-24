@@ -36,7 +36,7 @@ export function Notice({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, y: -16, scale: 0.97 }}
             transition={springs.default}
-            className="glass-thick pointer-events-auto flex max-w-md items-start gap-3 rounded-card px-4 py-3 shadow-[0_18px_40px_rgba(32,0,82,0.18)]"
+            className="glass-thick pointer-events-auto flex max-w-md items-start gap-3 rounded-card px-4 py-3 shadow-[0_18px_40px_rgba(17,17,17,0.18)]"
           >
             <p className="flex-1 text-[0.9375rem]">{message}</p>
             <button

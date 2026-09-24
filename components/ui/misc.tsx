@@ -3,8 +3,8 @@ import { formatUsd } from "@/lib/format";
 
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-2 text-xl font-semibold tracking-[-0.02em] ${className}`}>
-      <span className="bg-brand-gradient grid h-8 w-8 place-items-center rounded-full text-white shadow-primary">
+    <span className={`inline-flex items-center gap-2 text-xl font-extrabold tracking-[-0.045em] ${className}`}>
+      <span className="grid h-8 w-8 place-items-center rounded-full bg-brand text-text ring-[1.5px] ring-text">
         <Droplet className="h-4 w-4" strokeWidth={2.25} aria-hidden />
       </span>
       dripp

@@ -60,9 +60,9 @@ function CollectedBanner({ cents }: { cents: number }) {
       transition={springs.soft}
       className="bg-brand-gradient relative overflow-hidden rounded-card p-6 text-white shadow-primary"
     >
-      <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/20 blur-2xl" />
+      <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-brand/25 blur-2xl" />
       <p className="relative text-caption text-white/80">Tips that were waiting for you</p>
-      <p className="num relative mt-1 text-[2.75rem] font-semibold leading-none tracking-[-0.03em]">
+      <p className="num relative mt-1 text-[2.75rem] font-extrabold leading-none tracking-[-0.045em] text-brand">
         +{formatUsd(cents)}
       </p>
       <p className="relative mt-2 text-white/90">Collected. It&apos;s in your balance now.</p>
@@ -106,7 +106,7 @@ export function ChannelCard({ page, blurb }: { page: LinkPage; blurb: string }) 
           <div className="flex items-center gap-4">
             <span className="relative">
               <Avatar src={youtube.avatar_url} name={youtube.platform_username} className="h-12 w-12 text-title-2" />
-              <span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full bg-primary text-white ring-2 ring-bg">
+              <span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full bg-brand text-text ring-2 ring-bg">
                 <BadgeCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
               </span>
             </span>

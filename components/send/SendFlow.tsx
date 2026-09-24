@@ -11,6 +11,7 @@ import { formatUsd, parseUsdToCents } from "@/lib/format";
 import { MAX_TIP_CENTS } from "@/lib/fees";
 
 type Platform = "youtube" | "kick";
+export type SendPrefill = { platform: Platform; handle: string };
 type Step = "who" | "amount" | "review" | "sent";
 type Lookup = "idle" | "checking" | "existing_user" | "verified_unclaimed" | "not_found" | "error";
 
@@ -22,7 +23,15 @@ const QUICK_AMOUNTS = [100, 500, 1000, 2000];
 
 const stepTransition = { type: "spring", bounce: 0, duration: 0.3 } as const;
 
-export function SendFlow({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SendFlow({
+  open,
+  onClose,
+  prefill = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  prefill?: SendPrefill | null;
+}) {
   const [step, setStep] = useState<Step>("who");
   const [platform, setPlatform] = useState<Platform>("youtube");
   const [handle, setHandle] = useState("");
@@ -32,15 +41,16 @@ export function SendFlow({ open, onClose }: { open: boolean; onClose: () => void
   const [sendError, setSendError] = useState<string | null>(null);
   const [result, setResult] = useState<"settled" | "pending">("settled");
 
-  // Start fresh each time the sheet opens.
+  // Start fresh each time the sheet opens (with the recipient, if one was given).
   useEffect(() => {
     if (!open) return;
     setStep("who");
-    setHandle("");
+    if (prefill) setPlatform(prefill.platform);
+    setHandle(prefill?.handle ?? "");
     setLookup("idle");
     setAmountText("");
     setSendError(null);
-  }, [open]);
+  }, [open, prefill]);
 
   const cleanHandle = handle.trim().replace(/^@/, "");
   const cents = parseUsdToCents(amountText);
@@ -197,7 +207,7 @@ function WhoStep({
             aria-checked={platform === p.id}
             onClick={() => setPlatform(p.id)}
             className={`pressable h-10 rounded-full text-[0.9375rem] font-semibold ${
-              platform === p.id ? "bg-primary text-white" : "text-muted hover:text-text"
+              platform === p.id ? "bg-primary text-on-primary" : "text-muted hover:text-text"
             }`}
           >
             {p.label}
@@ -469,7 +479,7 @@ function SentStep({
         initial={reduce ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={reduce ? { duration: 0.15 } : { type: "spring", bounce: 0.3, duration: 0.45 }}
-        className="grid h-16 w-16 place-items-center rounded-full bg-primary text-white"
+        className="grid h-16 w-16 place-items-center rounded-full bg-primary text-on-primary"
       >
         {pending ? <Clock className="h-8 w-8" aria-hidden /> : <CheckCircle2 className="h-8 w-8" aria-hidden />}
       </motion.span>

@@ -4,35 +4,38 @@
 
 /*
  * Design tokens -- design.md sections 2 and 4. Light only.
- * Brand: Monad purple #836EF9. Buttons/text use a deeper step (#6D5AF0) so
- * white labels and purple text keep >= 4.5:1 contrast.
+ * Brand: "Coin" -- sunflower yellow #FFD23F with ink #111111. Yellow is a
+ * fill only (never text on white); primary actions are ink with yellow
+ * labels, and text on yellow uses --on-brand.
  */
 :root {
-  --bg: 248 247 252;
-  --text: 17 14 36;
-  --text-muted: 98 94 122;
-  --text-emphasis: 109 90 240;
+  --bg: 244 244 241;
+  --text: 17 17 17;
+  --text-muted: 94 94 87;
+  --text-emphasis: 17 17 17;
   --surface-solid: 255 255 255;
-  --brand: 131 110 249;
-  --primary: 109 90 240;
-  --primary-hover: 92 72 228;
-  --deep: 32 0 82;
-  --tint: 241 238 255;
-  --positive: 14 138 68;
-  --negative: 217 48 54;
-  --caution: 180 100 20;
-  --focus-ring: 131 110 249;
+  --brand: 255 210 63;
+  --on-brand: 74 64 32;
+  --primary: 17 17 17;
+  --primary-hover: 48 48 46;
+  --on-primary: 255 210 63;
+  --deep: 17 17 17;
+  --tint: 255 241 184;
+  --positive: 11 122 60;
+  --negative: 200 38 47;
+  --caution: 160 90 10;
+  --focus-ring: 17 17 17;
 
   --glass: rgba(255, 255, 255, 0.66);
   --glass-strong: rgba(255, 255, 255, 0.86);
-  --border-glass: rgba(32, 0, 82, 0.07);
+  --border-glass: rgba(17, 17, 17, 0.08);
   --edge-highlight: rgba(255, 255, 255, 1);
-  --glow-a: rgba(131, 110, 249, 0.22);
-  --glow-b: rgba(190, 150, 255, 0.18);
-  --scrim: rgba(17, 14, 36, 0.3);
-  --shadow: 0 1px 2px rgba(32, 0, 82, 0.04), 0 10px 30px rgba(32, 0, 82, 0.07);
-  --shadow-strong: 0 2px 6px rgba(32, 0, 82, 0.05), 0 30px 70px rgba(32, 0, 82, 0.16);
-  --shadow-primary: 0 10px 28px rgba(109, 90, 240, 0.35);
+  --glow-a: rgba(255, 210, 63, 0.3);
+  --glow-b: rgba(255, 210, 63, 0.18);
+  --scrim: rgba(17, 17, 17, 0.32);
+  --shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 30px rgba(17, 17, 17, 0.07);
+  --shadow-strong: 0 2px 6px rgba(17, 17, 17, 0.05), 0 30px 70px rgba(17, 17, 17, 0.16);
+  --shadow-primary: 0 10px 28px rgba(17, 17, 17, 0.24);
 
   color-scheme: light;
 }
@@ -119,7 +122,7 @@ body {
       inset 0 1px 0 rgba(255, 255, 255, 0.95),
       inset 0 -1px 0 rgba(255, 255, 255, 0.25),
       inset 0 0 24px rgba(255, 255, 255, 0.18),
-      0 10px 36px rgba(32, 0, 82, 0.1);
+      0 10px 36px rgba(17, 17, 17, 0.1);
   }
   .liquid-glass::before {
     content: "";
@@ -160,7 +163,7 @@ body {
       inset 0 1px 0 rgba(255, 255, 255, 1),
       inset 0 -1px 0 rgba(255, 255, 255, 0.3),
       inset 0 0 28px rgba(255, 255, 255, 0.24),
-      0 14px 44px rgba(32, 0, 82, 0.14);
+      0 14px 44px rgba(17, 17, 17, 0.14);
   }
 
   /* The glass "lens" that glides under hovered nav items. */
@@ -175,7 +178,7 @@ body {
     -webkit-backdrop-filter: blur(4px) saturate(180%);
   }
 
-  /* Feature cards: a low wash of Monad purple fading into white. */
+  /* Feature cards: a low wash of coin yellow fading into white. */
   .card-wash {
     background:
       radial-gradient(120% 90% at 0% 0%, rgb(var(--brand) / 0.16) 0%, transparent 60%),
@@ -191,19 +194,23 @@ body {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1), var(--shadow);
   }
 
-  /* Headline accent: Monad purple into a soft violet-pink. */
-  .text-gradient {
-    background: linear-gradient(100deg, rgb(var(--primary)) 0%, rgb(var(--brand)) 45%, #c07bff 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  /* Headline accent: a coin-yellow marker stroke behind the words. */
+  .text-highlight {
+    background-image: linear-gradient(
+      transparent 58%,
+      rgb(var(--brand)) 58%,
+      rgb(var(--brand)) 94%,
+      transparent 94%
+    );
+    padding-inline: 0.06em;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
   }
 
-  /* Brand gradient fill for hero surfaces and the closing CTA. */
+  /* Ink fill with a warm coin glow in one corner, for hero surfaces. */
   .bg-brand-gradient {
     background:
-      radial-gradient(60% 80% at 0% 0%, rgb(var(--brand)) 0%, transparent 70%),
-      radial-gradient(60% 80% at 100% 100%, #b77bff 0%, transparent 70%),
+      radial-gradient(70% 90% at 100% 0%, rgb(var(--brand) / 0.16) 0%, transparent 65%),
       rgb(var(--primary));
   }
 

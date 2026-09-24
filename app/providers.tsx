@@ -46,7 +46,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         appearance: {
           // Match the app so the login popup feels native (design.md 10).
           theme: "light",
-          accentColor: "#6D5AF0",
+          accentColor: "#111111",
           landingHeader: "Sign in to dripp",
           showWalletLoginFirst: false,
         },

@@ -59,7 +59,7 @@ export default function ActivityPage() {
             aria-selected={filter === f}
             onClick={() => setFilter(f)}
             className={`pressable relative h-9 shrink-0 rounded-full px-4 text-[0.9375rem] font-semibold ${
-              filter === f ? "text-white" : "text-muted hover:text-text"
+              filter === f ? "text-on-primary" : "text-muted hover:text-text"
             }`}
           >
             {filter === f && (
