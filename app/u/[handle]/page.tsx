@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { unstable_noStore as noStore } from "next/cache";
 import { ArrowRight, BadgeCheck, Hourglass, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -7,55 +8,78 @@ import { Wordmark } from "@/components/ui/misc";
 import { normalizeHandle } from "@/lib/username-resolve";
 import { supabaseServer } from "@/lib/supabase";
 import { formatUsd } from "@/lib/format";
+import { visibilityFromRow, type ProfileVisibility } from "@/lib/profile-visibility";
+import { youtubeSubscriberCount } from "@/lib/youtube";
 
-// Totals change with every tip; read them fresh.
+// Totals and the owner's choices change at any time; always read them fresh.
 export const dynamic = "force-dynamic";
 
 type Profile =
   | { kind: "not_found"; handle: string }
-  | { kind: "private"; handle: string; avatarUrl: string | null; verified: boolean }
   | {
-      kind: "public";
+      kind: "found";
       handle: string;
       avatarUrl: string | null;
       verified: boolean;
+      show: ProfileVisibility;
       receivedCents: number;
       receivedCount: number;
       sentCents: number;
       sentCount: number;
+      subscribers: number | null;
     };
 
 /**
- * A creator's public page: handle, verified badge and -- unless they turned
- * it off on their Profile -- everything they've received and tipped out
- * (PRD 7.1, a transparency signal). Dollars and handles only.
+ * A creator's public page: handle and verified badge, plus whichever of
+ * their totals and subscriber count they chose to show on Profile ("What
+ * people see", PRD 7.1). Anything they hide is never read or sent to the
+ * page. Dollars and handles only.
  */
 async function loadProfile(raw: string): Promise<Profile> {
+  noStore();
   const handle = normalizeHandle(decodeURIComponent(raw));
   const db = supabaseServer();
   const { data: link } = await db
     .from("platform_links")
-    .select("user_id, platform_username, avatar_url, channel_id, users(*)")
+    .select("user_id, platform_username, avatar_url, channel_id")
     .eq("platform", "youtube")
     .eq("platform_username", handle)
     .maybeSingle();
   if (!link) return { kind: "not_found", handle };
 
-  const base = { handle: link.platform_username, avatarUrl: link.avatar_url, verified: !!link.channel_id };
-  const owner = link.users as unknown as { profile_public?: boolean } | null;
-  if (owner && owner.profile_public === false) return { kind: "private", ...base };
+  // A failed read shows nothing (visibilityFromRow treats missing as hidden).
+  const { data: owner } = await db.from("users").select("*").eq("id", link.user_id).maybeSingle();
+  const show = visibilityFromRow(owner);
 
-  const { data } = await db.rpc("profile_totals", { p_user_id: link.user_id });
-  const t = (Array.isArray(data) ? data[0] : data) ?? {};
+  let totals: Record<string, unknown> = {};
+  if (show.received || show.sent) {
+    const { data } = await db.rpc("profile_totals", { p_user_id: link.user_id });
+    totals = (Array.isArray(data) ? data[0] : data) ?? {};
+  }
+  let subscribers: number | null = null;
+  if (show.subscribers && link.channel_id) {
+    try {
+      subscribers = await youtubeSubscriberCount(link.channel_id);
+    } catch (err) {
+      console.error("public profile subscriber count failed", err);
+    }
+  }
+
   return {
-    kind: "public",
-    ...base,
-    receivedCents: Math.round(Number(t.received ?? 0) * 100),
-    receivedCount: Number(t.received_count ?? 0),
-    sentCents: Math.round(Number(t.sent ?? 0) * 100),
-    sentCount: Number(t.sent_count ?? 0),
+    kind: "found",
+    handle: link.platform_username,
+    avatarUrl: link.avatar_url,
+    verified: !!link.channel_id,
+    show,
+    receivedCents: show.received ? Math.round(Number(totals.received ?? 0) * 100) : 0,
+    receivedCount: show.received && show.tipCounts ? Number(totals.received_count ?? 0) : 0,
+    sentCents: show.sent ? Math.round(Number(totals.sent ?? 0) * 100) : 0,
+    sentCount: show.sent && show.tipCounts ? Number(totals.sent_count ?? 0) : 0,
+    subscribers,
   };
 }
+
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
 export async function generateMetadata({ params }: { params: { handle: string } }): Promise<Metadata> {
   const handle = normalizeHandle(decodeURIComponent(params.handle));
@@ -75,7 +99,7 @@ export default async function PublicProfilePage({ params }: { params: { handle: 
         <GlassCard level="thick" className="flex flex-col items-center gap-3 px-6 pb-6 pt-8 text-center">
           <span className="relative">
             <Avatar
-              src={p.kind === "not_found" ? null : p.avatarUrl}
+              src={p.kind === "found" ? p.avatarUrl : null}
               name={p.handle}
               className="h-20 w-20 text-[2rem]"
             />
@@ -96,13 +120,27 @@ export default async function PublicProfilePage({ params }: { params: { handle: 
             </p>
           </div>
 
-          {p.kind === "public" && (
-            <dl className="mt-3 grid w-full grid-cols-2 gap-3 text-left">
-              <Total label="Received" cents={p.receivedCents} count={p.receivedCount} highlight />
-              <Total label="Tipped out" cents={p.sentCents} count={p.sentCount} />
+          {p.kind === "found" && p.show.subscribers && p.subscribers !== null && (
+            <p className="text-caption font-semibold text-muted">
+              <span className="num text-text">{compact.format(p.subscribers)}</span> subscribers
+            </p>
+          )}
+          {p.kind === "found" && (p.show.received || p.show.sent) && (
+            <dl className={`mt-3 grid w-full gap-3 text-left ${p.show.received && p.show.sent ? "grid-cols-2" : "grid-cols-1"}`}>
+              {p.show.received && (
+                <Total
+                  label="Received"
+                  cents={p.receivedCents}
+                  count={p.show.tipCounts ? p.receivedCount : null}
+                  highlight
+                />
+              )}
+              {p.show.sent && (
+                <Total label="Tipped out" cents={p.sentCents} count={p.show.tipCounts ? p.sentCount : null} />
+              )}
             </dl>
           )}
-          {p.kind === "private" && (
+          {p.kind === "found" && !p.show.received && !p.show.sent && (
             <p className="mt-2 flex items-center gap-2 text-caption text-muted">
               <Lock className="h-4 w-4" aria-hidden /> @{p.handle} keeps their totals private.
             </p>
@@ -127,14 +165,26 @@ export default async function PublicProfilePage({ params }: { params: { handle: 
   );
 }
 
-function Total({ label, cents, count, highlight }: { label: string; cents: number; count: number; highlight?: boolean }) {
+function Total({
+  label,
+  cents,
+  count,
+  highlight,
+}: {
+  label: string;
+  cents: number;
+  count: number | null;
+  highlight?: boolean;
+}) {
   return (
     <div className={`rounded-card p-4 ${highlight ? "bg-brand" : "bg-text/[0.05]"}`}>
       <dt className={`text-caption ${highlight ? "text-on-brand" : "text-muted"}`}>{label}</dt>
       <dd className="num mt-1 text-[1.75rem] font-extrabold leading-none tracking-[-0.045em]">{formatUsd(cents)}</dd>
-      <dd className={`mt-1.5 text-caption ${highlight ? "text-on-brand" : "text-muted"}`}>
-        {count} {count === 1 ? "tip" : "tips"}
-      </dd>
+      {count !== null && (
+        <dd className={`mt-1.5 text-caption ${highlight ? "text-on-brand" : "text-muted"}`}>
+          {count} {count === 1 ? "tip" : "tips"}
+        </dd>
+      )}
     </div>
   );
 }

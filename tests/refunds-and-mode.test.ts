@@ -4,6 +4,7 @@ const store = vi.hoisted(() => ({
   pending: [] as Array<{ platform: string; platform_username: string; handle_hash: string | null }>,
   rpcCalls: [] as Array<{ name: string; args: Record<string, unknown> }>,
   modeUpdateRows: [] as unknown[],
+  updates: [] as Record<string, unknown>[],
   refundable: new Map<string, { units: bigint; availableAt: bigint }>(),
 }));
 
@@ -15,6 +16,7 @@ vi.mock("@/lib/supabase", () => ({
       Object.assign(q, {
         select: chain,
         eq: chain,
+        maybeSingle: chain,
         is: chain,
         not: chain,
         lt: chain,
@@ -23,7 +25,20 @@ vi.mock("@/lib/supabase", () => ({
           resolve(table === "pending_tips" ? { data: store.pending, error: null } : { data: [], error: null }),
       });
       if (table === "users") {
-        (q as { select: unknown }).select = async () => ({ data: store.modeUpdateRows, error: null });
+        let updated: Record<string, unknown> = {};
+        (q as { update: unknown }).update = (fields: Record<string, unknown>) => {
+          updated = fields;
+          store.updates.push(fields);
+          return q;
+        };
+        (q as { select: unknown }).select = () =>
+          Object.assign(Promise.resolve({ data: store.modeUpdateRows, error: null }), {
+            // The saved row: every option on, then this update applied.
+            single: async () => ({
+              data: { show_received: true, show_sent: true, show_tip_counts: true, show_subscribers: true, ...updated },
+              error: null,
+            }),
+          });
       }
       return q;
     },
@@ -50,6 +65,7 @@ beforeEach(() => {
   store.pending = [];
   store.rpcCalls = [];
   store.modeUpdateRows = [];
+  store.updates = [];
   store.refundable = new Map();
 });
 
@@ -132,16 +148,31 @@ describe("viewer/creator mode is chosen once", () => {
     expect(res.status).toBe(409);
   });
 
-  it("switches the public profile on and off without touching the mode", async () => {
+  it("saves what the public profile shows, one option at a time, without touching the mode", async () => {
     const res = await PATCH(
       new Request("http://test/api/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profilePublic: false }),
+        body: JSON.stringify({ profileVisibility: { sent: false } }),
       }) as never
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ profilePublic: false });
+    expect(store.updates).toEqual([{ show_sent: false }]);
+    expect(await res.json()).toEqual({
+      profileVisibility: { received: true, sent: false, tipCounts: true, subscribers: true },
+    });
+  });
+
+  it("rejects unknown profile options", async () => {
+    const res = await PATCH(
+      new Request("http://test/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileVisibility: { wallet: true } }),
+      }) as never
+    );
+    expect(res.status).toBe(400);
+    expect(store.updates).toEqual([]);
   });
 
   it("rejects anything else", async () => {

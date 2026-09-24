@@ -27,7 +27,8 @@ README covers the code. The design tokens (the "Coin" palette -- yellow
 - Withdrawing to a wallet address (the offramp stand-in, only for the
   accounts in `WITHDRAW_TO_ADDRESS_EMAILS`).
 - The live subscriber count on the Creator page and the public profile page
-  (`/u/<handle>`, totals received and tipped out, can be made private).
+  (`/u/<handle>`; the user picks what it shows under Profile → "What people
+  see": total received, total tipped out, tip counts, subscriber count).
 - Bulk sends (the same path as a single tip, once per recipient).
 - The background recovery job (records tips and refunds whose confirmation
   was missed, finishes escrow claims).
@@ -35,7 +36,7 @@ README covers the code. The design tokens (the "Coin" palette -- yellow
 
 Automated tests: `npm test` (money math, the onchain log checks, the confirm
 route, OAuth state, channel-ID resolution, the lookup cache, rate limiting,
-refunds, the one-time mode choice, the public-profile switch and who may
+refunds, the one-time mode choice, the public-profile options and who may
 withdraw to an address) and `forge test` in `contracts/` (unit tests plus invariant tests: every handle's escrow equals
 its senders' contributions and the vault's balance, and a claimed tip can
 never also be refunded).
@@ -90,9 +91,9 @@ app/                          Next.js App Router
   (app)/                      Signed-in app: Money, Activity, Creator, Profile
   providers.tsx               Privy + SmartWalletsProvider (gas-free sending)
   overlay/[username]/         OBS browser-source page (?platform=youtube|kick)
-  u/[handle]/                 Public profile: totals received / tipped out (unless private)
+  u/[handle]/                 Public profile: whichever totals / subscriber count the user chose to show
   api/
-    me/                       POST sign-up/sync, PATCH viewer/creator mode or public-profile switch
+    me/                       POST sign-up/sync, PATCH viewer/creator mode or what the public profile shows
     tip/prepare/              POST -- save a tip intent, return the calls for the smart wallet to send
     tip/confirm/              POST -- verify the tx onchain against the intent, then record the tip
     withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (to a wallet address, testers only, until Mercuryo)
@@ -115,6 +116,7 @@ lib/
   tip-plan.ts                 Where a tip goes + the exact calls (saved as a tip intent by prepare)
   withdraw-plan.ts            Withdrawal calls: 1% fee to treasury + payout, batched
   withdraw-access.ts          Who may withdraw to a wallet address (WITHDRAW_TO_ADDRESS_EMAILS)
+  profile-visibility.ts       What the public profile shows (the "What people see" options)
   tipvault.ts                 TipVault ABI + handle hash
   money-client.ts             Browser: useSendTip, useWithdraw, useBalance, useActivity, unconfirmed tip/withdrawal retries
   youtube.ts / kick.ts        Single-username platform lookups; YouTube subscriber count by channel ID

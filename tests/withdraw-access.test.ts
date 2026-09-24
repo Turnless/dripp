@@ -26,3 +26,19 @@ describe("withdraw to a wallet address", () => {
     expect(mayWithdrawToAddress("anyone@example.com")).toBe(true);
   });
 });
+
+import { visibilityFromRow } from "@/lib/profile-visibility";
+
+describe("public profile options", () => {
+  it("shows only what's switched on", () => {
+    expect(
+      visibilityFromRow({ show_received: true, show_sent: false, show_tip_counts: false, show_subscribers: true })
+    ).toEqual({ received: true, sent: false, tipCounts: false, subscribers: true });
+  });
+
+  it("hides everything when the row is missing or not migrated yet", () => {
+    const hidden = { received: false, sent: false, tipCounts: false, subscribers: false };
+    expect(visibilityFromRow(null)).toEqual(hidden);
+    expect(visibilityFromRow({ id: "u1" })).toEqual(hidden);
+  });
+});

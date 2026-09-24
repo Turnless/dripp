@@ -157,8 +157,24 @@ alter table chain_logs drop constraint if exists chain_logs_kind_check;
 alter table chain_logs add constraint chain_logs_kind_check
   check (kind in ('tip', 'escrow_deposit', 'escrow_refund', 'withdrawal_fee', 'withdrawal_payout'));
 
--- 4b. public profile switch (/u/<handle>) ---------------------------------
-alter table users add column if not exists profile_public boolean not null default true;
+-- 4b. what the public profile (/u/<handle>) shows ------------------------
+alter table users add column if not exists show_received boolean not null default true;
+alter table users add column if not exists show_sent boolean not null default true;
+alter table users add column if not exists show_tip_counts boolean not null default true;
+alter table users add column if not exists show_subscribers boolean not null default true;
+
+-- Replaces the earlier single on/off switch: anyone who had turned it off
+-- keeps their totals hidden.
+do $$ begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'users' and column_name = 'profile_public'
+  ) then
+    execute 'update users set show_received = false, show_sent = false, show_tip_counts = false
+             where profile_public = false';
+    execute 'alter table users drop column profile_public';
+  end if;
+end $$;
 
 -- 5. live tip alerts for the overlay -------------------------------------
 do $$ begin
