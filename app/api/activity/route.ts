@@ -5,7 +5,8 @@ import { supabaseServer } from "@/lib/supabase";
 export type ActivityItem = {
   id: string;
   direction: "sent" | "received" | "withdrawn";
-  status: "settled" | "waiting" | "collected";
+  // returned = an escrowed tip that came back to its sender (nobody claimed it in 30 days)
+  status: "settled" | "waiting" | "collected" | "returned";
   cents: number;
   feeCents?: number;
   counterparty: string | null; // "@handle", or null for withdrawals
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
       .limit(limit),
     db
       .from("pending_tips")
-      .select("id, platform_username, amount, claimed_at, created_at")
+      .select("id, platform_username, amount, claimed_at, refunded_at, created_at")
       .eq("sender_id", me.id)
       .order("created_at", { ascending: false })
       .limit(limit),
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
       (p): ActivityItem => ({
         id: `pending-${p.id}`,
         direction: "sent",
-        status: p.claimed_at ? "collected" : "waiting",
+        status: p.refunded_at ? "returned" : p.claimed_at ? "collected" : "waiting",
         cents: toCents(p.amount),
         counterparty: `@${p.platform_username}`,
         at: p.created_at,

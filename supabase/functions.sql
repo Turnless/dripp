@@ -79,20 +79,23 @@ begin
       values (v_intent.sender_id, v_intent.recipient_id, v_intent.amount, v_tx, v_used);
   else
     insert into pending_tips (
-      platform, platform_username, amount, sender_id, sender_wallet,
+      platform, platform_username, amount, sender_id, sender_wallet, handle_hash,
       deposit_tx_hash, deposit_log_index, deposit_block
     )
     values (
       v_intent.platform, v_intent.platform_username, v_intent.amount, v_intent.sender_id,
-      v_intent.sender_wallet, v_tx, v_used, p_block
+      v_intent.sender_wallet, lower(v_intent.handle_hash), v_tx, v_used, p_block
     )
     returning id into v_pending_id;
 
     -- Recorded after a claim already released it (e.g. found later by the
     -- reconcile job): the first successful claim after this deposit took it.
     select * into v_claim from escrow_claims
-      where platform = v_intent.platform
-        and platform_username = v_intent.platform_username
+      where (
+          handle_hash = lower(v_intent.handle_hash)
+          or (handle_hash is null
+              and platform = v_intent.platform and platform_username = v_intent.platform_username)
+        )
         and succeeded
         and (claim_block, claim_log_index) > (p_block, v_used)
       order by claim_block, claim_log_index
@@ -217,9 +220,20 @@ begin
       set claimed_by = v_claim.claimed_by,
           claim_tx_hash = v_claim.tx_hash,
           claimed_at = now()
-      where platform = v_claim.platform
-        and platform_username = v_claim.platform_username
+      where (
+          (v_claim.handle_hash is not null and (
+            handle_hash = v_claim.handle_hash
+            -- A claim of the old handle-based key also releases deposits
+            -- recorded before escrow keys were stored.
+            or (handle_hash is null and v_claim.legacy_handle
+                and platform = v_claim.platform and platform_username = v_claim.platform_username)
+          ))
+          -- Claims recorded before escrow keys were stored.
+          or (v_claim.handle_hash is null
+              and platform = v_claim.platform and platform_username = v_claim.platform_username)
+        )
         and claimed_at is null
+        and refunded_at is null
         -- Rows without a deposit transaction were never verified onchain.
         and deposit_tx_hash is not null
         -- Rows from before logs were tracked (no block) predate every claim
@@ -235,13 +249,154 @@ begin
 end;
 $$;
 
+-- Records a TipVault.refund (PendingTipRefunded log): marks the sender's
+-- unclaimed deposits under that escrow key, made before the refund onchain,
+-- as refunded. p_legacy_platform/p_legacy_username identify deposits
+-- recorded before escrow keys were stored (handle_hash NULL) whose key was
+-- the old handle-based one. Returns the number of tips marked, or -1 if this
+-- refund was already recorded.
+create or replace function record_refund(
+  p_sender_id uuid,
+  p_tx_hash text,
+  p_log_index integer,
+  p_block bigint,
+  p_handle_hash text,
+  p_legacy_platform text,
+  p_legacy_username text
+)
+returns integer
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_tx text := lower(p_tx_hash);
+  v_count integer;
+begin
+  insert into chain_logs (tx_hash, log_index, kind)
+    values (v_tx, p_log_index, 'escrow_refund')
+    on conflict do nothing;
+  if not found then
+    return -1;
+  end if;
+
+  update pending_tips
+    set refunded_at = now(), refund_tx_hash = v_tx
+    where sender_id = p_sender_id
+      and claimed_at is null
+      and refunded_at is null
+      and deposit_tx_hash is not null
+      and (
+        handle_hash = lower(p_handle_hash)
+        or (handle_hash is null and p_legacy_platform is not null
+            and platform = p_legacy_platform and platform_username = p_legacy_username)
+      )
+      and (
+        deposit_block is null
+        or (deposit_block, deposit_log_index) < (p_block, p_log_index)
+      );
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+-- Links a platform channel to a user after OAuth proved they own it. The
+-- channel ID is the identity: if the channel was linked before (to anyone,
+-- under any handle), that row moves to this user with the current handle.
+-- Any other row still holding this handle is stale (the handle was renamed
+-- or reassigned) and is removed, so the handle can't route tips elsewhere;
+-- so are this user's pre-channel-ID links on the platform.
+create or replace function link_platform_account(
+  p_user_id uuid,
+  p_platform text,
+  p_channel_id text,
+  p_username text,
+  p_avatar_url text
+)
+returns void
+language plpgsql
+set search_path = public
+as $$
+begin
+  delete from platform_links
+    where platform = p_platform
+      and platform_username = p_username
+      and channel_id is distinct from p_channel_id;
+
+  -- This user's links from before channel IDs were stored may name a handle
+  -- they no longer hold; the channel they just proved replaces them.
+  delete from platform_links
+    where platform = p_platform
+      and user_id = p_user_id
+      and channel_id is null;
+
+  update platform_links
+    set user_id = p_user_id,
+        platform_username = p_username,
+        avatar_url = p_avatar_url,
+        verified_at = now()
+    where platform = p_platform and channel_id = p_channel_id;
+
+  if not found then
+    insert into platform_links (user_id, platform, platform_username, channel_id, avatar_url, verified_at)
+      values (p_user_id, p_platform, p_username, p_channel_id, p_avatar_url, now());
+  end if;
+end;
+$$;
+
+-- Counts one request against each key (e.g. "tip:u:<user id>",
+-- "tip:ip:<address>") in a fixed window of p_window_seconds, and returns
+-- true if every key is still within its limit (p_limits[i] for p_keys[i] --
+-- an IP is shared by everyone behind the same network, so it gets a looser
+-- limit than a user). Keys over the limit still count, so hammering keeps
+-- you limited. Old rows are pruned now and then.
+create or replace function hit_rate_limit(
+  p_keys text[],
+  p_limits integer[],
+  p_window_seconds integer
+)
+returns boolean
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_i integer;
+  v_count integer;
+  v_allowed boolean := true;
+  v_window interval := make_interval(secs => p_window_seconds);
+begin
+  for v_i in 1 .. coalesce(array_length(p_keys, 1), 0) loop
+    insert into rate_limits as r (key, window_start, count)
+      values (p_keys[v_i], now(), 1)
+      on conflict (key) do update
+        set window_start = case when r.window_start <= now() - v_window then now() else r.window_start end,
+            count = case when r.window_start <= now() - v_window then 1 else r.count + 1 end
+      returning r.count into v_count;
+    if v_count > p_limits[v_i] then
+      v_allowed := false;
+    end if;
+  end loop;
+
+  if random() < 0.01 then
+    delete from rate_limits where window_start < now() - interval '1 day';
+  end if;
+
+  return v_allowed;
+end;
+$$;
+
 -- Only the server (service-role key) may call these. Supabase grants new
 -- functions to anon/authenticated by default, and the anon key is public.
 revoke execute on function tx_has_legacy_record(text) from public, anon, authenticated;
 revoke execute on function record_tip(uuid, uuid, text, integer[], bigint) from public, anon, authenticated;
 revoke execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) from public, anon, authenticated;
 revoke execute on function apply_escrow_claim(text, boolean, bigint, integer) from public, anon, authenticated;
+revoke execute on function hit_rate_limit(text[], integer[], integer) from public, anon, authenticated;
+revoke execute on function record_refund(uuid, text, integer, bigint, text, text, text) from public, anon, authenticated;
+revoke execute on function link_platform_account(uuid, text, text, text, text) from public, anon, authenticated;
 grant execute on function tx_has_legacy_record(text) to service_role;
 grant execute on function record_tip(uuid, uuid, text, integer[], bigint) to service_role;
 grant execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) to service_role;
 grant execute on function apply_escrow_claim(text, boolean, bigint, integer) to service_role;
+grant execute on function hit_rate_limit(text[], integer[], integer) to service_role;
+grant execute on function record_refund(uuid, text, integer, bigint, text, text, text) to service_role;
+grant execute on function link_platform_account(uuid, text, text, text, text) to service_role;

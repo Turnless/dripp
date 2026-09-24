@@ -11,7 +11,10 @@ import { Wordmark } from "@/components/ui/misc";
 import { LiquidBar, useHoverLens } from "@/components/ui/LiquidGlass";
 import { useAccount } from "@/components/account";
 import { springs } from "@/components/motion";
-import { useFinishUnconfirmedTips } from "@/lib/money-client";
+import { useAutoRefunds, useFinishUnconfirmedTips, type ReturnedTips } from "@/lib/money-client";
+import { formatUsd } from "@/lib/format";
+import { Notice } from "@/components/ui/Notice";
+import { Avatar } from "@/components/ui/Avatar";
 
 const SendContext = createContext<{ openSend: () => void }>({ openSend: () => {} });
 export const useSend = () => useContext(SendContext);
@@ -29,15 +32,23 @@ function navFor(mode: string | null): NavItem[] {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { mode } = useAccount();
+  const { mode, avatarUrl } = useAccount();
   useFinishUnconfirmedTips();
+  const [notice, setNotice] = useState<string | null>(null);
+  const clearNotice = useCallback(() => setNotice(null), []);
+  useAutoRefunds(
+    useCallback(({ cents, handles }: ReturnedTips) => {
+      const who = handles.length === 1 ? handles[0] : handles.length ? "some people you tipped" : "someone you tipped";
+      setNotice(`${formatUsd(cents)} is back in your balance. ${who} didn't join dripp within 30 days.`);
+    }, [])
+  );
   const { user } = usePrivy();
   const [sendOpen, setSendOpen] = useState(false);
   const openSend = useCallback(() => setSendOpen(true), []);
   const closeSend = useCallback(() => setSendOpen(false), []);
   const nav = navFor(mode);
   const lens = useHoverLens("app-nav");
-  const initial = (user?.google?.name ?? "D").charAt(0).toUpperCase();
+  const name = user?.google?.name ?? "dripp";
 
   return (
     <SendContext.Provider value={{ openSend }}>
@@ -69,9 +80,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 href="/profile"
                 aria-label="Profile"
-                className="pressable grid h-10 w-10 place-items-center rounded-full bg-tint font-semibold text-emphasis"
+                className="pressable rounded-full"
               >
-                {initial}
+                <Avatar src={avatarUrl} name={name} />
               </Link>
             </div>
           </LiquidBar>
@@ -83,9 +94,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/profile"
             aria-label="Profile"
-            className="pressable grid h-10 w-10 place-items-center rounded-full bg-tint font-semibold text-emphasis"
+            className="pressable rounded-full"
           >
-            {initial}
+            <Avatar src={avatarUrl} name={name} />
           </Link>
         </header>
 
@@ -120,6 +131,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <SendFlow open={sendOpen} onClose={closeSend} />
+        <Notice message={notice} onDismiss={clearNotice} />
       </div>
     </SendContext.Provider>
   );

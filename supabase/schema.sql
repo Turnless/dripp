@@ -26,9 +26,17 @@ create table platform_links (
   user_id uuid not null references users(id) on delete cascade,
   platform text not null check (platform in ('youtube', 'kick')),
   -- Always stored normalized (see normalizeHandle in lib/username-resolve.ts).
+  -- The current handle, for display and lookup; it can change.
   platform_username text not null check (platform_username = lower(platform_username)),
+  -- The platform's permanent channel ID -- the identity that tips and escrow
+  -- follow, so a renamed or reassigned handle can't route money to the
+  -- wrong person. Written only by link_platform_account (functions.sql).
+  channel_id text,
+  -- The channel's profile picture, used as the user's avatar.
+  avatar_url text,
   verified_at timestamptz not null default now(),
-  unique (platform, platform_username)
+  unique (platform, platform_username),
+  unique (platform, channel_id)
 );
 
 -- Indexed lookup target for "does this platform username already exist on
@@ -47,6 +55,8 @@ create table pending_tips (
   amount numeric(12, 2) not null check (amount > 0),
   sender_id uuid not null references users(id),
   sender_wallet text not null,
+  -- TipVault escrow key the deposit was made under (lib/tipvault.ts).
+  handle_hash text,
   deposit_tx_hash text not null,
   -- Position of the PendingTipDeposited log, so a claim can tell which
   -- deposits it released (see apply_escrow_claim in functions.sql).
@@ -55,6 +65,10 @@ create table pending_tips (
   claimed_by uuid references users(id),
   claim_tx_hash text,
   claimed_at timestamptz,
+  -- Set when the sender took the money back (TipVault.refund, 30 days after
+  -- their latest deposit if nobody claimed it).
+  refunded_at timestamptz,
+  refund_tx_hash text,
   created_at timestamptz not null default now(),
   unique (deposit_tx_hash, deposit_log_index)
 );
@@ -130,7 +144,7 @@ create index idx_tip_intents_open on tip_intents (created_at) where confirmed_at
 create table chain_logs (
   tx_hash text not null,
   log_index integer not null,
-  kind text not null check (kind in ('tip', 'escrow_deposit', 'withdrawal_fee', 'withdrawal_payout')),
+  kind text not null check (kind in ('tip', 'escrow_deposit', 'escrow_refund', 'withdrawal_fee', 'withdrawal_payout')),
   created_at timestamptz not null default now(),
   primary key (tx_hash, log_index)
 );
@@ -143,6 +157,11 @@ create table escrow_claims (
   platform text not null check (platform in ('youtube', 'kick')),
   platform_username text not null check (platform_username = lower(platform_username)),
   claimed_by uuid not null references users(id),
+  -- The escrow key claimed. legacy_handle marks a claim of the old
+  -- handle-based key, which also releases deposits recorded before keys were
+  -- stored (pending_tips.handle_hash NULL).
+  handle_hash text,
+  legacy_handle boolean not null default false,
   succeeded boolean,
   claim_block bigint,
   claim_log_index integer,
@@ -151,6 +170,27 @@ create table escrow_claims (
 );
 
 create index idx_escrow_claims_handle on escrow_claims (platform, platform_username);
+
+-- Cached YouTube/Kick handle lookups, so tipping someone who hasn't joined
+-- doesn't spend platform API quota on every attempt -- and keeps working
+-- (for handles seen before) if the quota runs out. See lib/username-resolve.ts.
+create table handle_lookups (
+  platform text not null check (platform in ('youtube', 'kick')),
+  platform_username text not null check (platform_username = lower(platform_username)),
+  found boolean not null,
+  channel_id text,
+  checked_at timestamptz not null default now(),
+  primary key (platform, platform_username)
+);
+
+-- Per-user / per-IP request counters for API rate limiting (fixed window).
+-- Written only through hit_rate_limit in functions.sql, which also prunes
+-- old rows.
+create table rate_limits (
+  key text primary key,
+  window_start timestamptz not null,
+  count integer not null
+);
 
 -- Progress markers for background jobs (e.g. the last block the reconcile
 -- job has scanned).
@@ -186,3 +226,5 @@ alter table tip_intents enable row level security;
 alter table chain_logs enable row level security;
 alter table escrow_claims enable row level security;
 alter table sync_state enable row level security;
+alter table handle_lookups enable row level security;
+alter table rate_limits enable row level security;

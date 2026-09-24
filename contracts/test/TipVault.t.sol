@@ -29,6 +29,30 @@ contract TipVaultTest is Test {
         usdc.approve(address(vault), type(uint256).max);
     }
 
+    // ---------- escrow key ----------
+
+    /// The app computes the same key in TypeScript (lib/tipvault.ts
+    /// handleHash); tests/money.test.ts asserts these exact values.
+    function test_handleHash_matchesTheApp() public pure {
+        assertEq(
+            keccak256(abi.encodePacked("youtube", ":", "somecreator")),
+            0x1029ba6191fe353fbd48e2ac5794dd816c141703a5787a0cea8294ef4d019d0e
+        );
+        assertEq(
+            keccak256(abi.encodePacked("kick", ":", "somecreator")),
+            0xf86f51406bb7248862de01f466579977b833670b4868262be47c0d68e6be54a4
+        );
+    }
+
+    /// Channel-ID escrow key (lib/tipvault.ts channelKey), asserted in
+    /// tests/money.test.ts too.
+    function test_channelKey_matchesTheApp() public pure {
+        assertEq(
+            keccak256(abi.encodePacked("youtube", "#", "UCabc123")),
+            0x28665104ac78382eafc46f9456552d248ade2338c7f3d48969aabc6582449b53
+        );
+    }
+
     // ---------- deposit + claim ----------
 
     function test_depositPending_increasesBalance() public {

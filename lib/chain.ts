@@ -27,7 +27,10 @@ export const monad = defineChain({
 // Native, Circle-issued USDC on Monad mainnet -- confirmed live in research.
 // Do not substitute USDT0 (LayerZero-bridged, far less liquid) as the default asset.
 export const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS as `0x${string}`;
-export const USDC_DECIMALS = Number(process.env.NEXT_PUBLIC_USDC_DECIMALS ?? 6);
+// USDC has 6 decimals on every chain Circle issues it on. A property of the
+// token, not configuration: an env override could silently scale every
+// amount, so it's fixed here.
+export const USDC_DECIMALS = 6;
 
 export const minimalErc20Abi = [
   {

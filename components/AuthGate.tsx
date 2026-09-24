@@ -1,31 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Check, HeartHandshake, Radio } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CenterScreen, Wordmark } from "@/components/ui/misc";
+import { AppSkeleton } from "@/components/AppSkeleton";
 import { Landing } from "@/components/landing/Landing";
 import { AccountContext, type Mode, type PlatformLink } from "@/components/account";
 import { springs } from "@/components/motion";
 import { readError } from "@/lib/hooks";
 
-type Me = { mode: Mode | null; links: PlatformLink[] };
+type Me = { mode: Mode | null; links: PlatformLink[]; avatarUrl: string | null };
 type SetupState = { status: "loading" } | { status: "error" } | { status: "ready"; me: Me };
 
 /**
  * Creates/refreshes the signed-in user's account row via /api/me. The smart
  * wallet is created client-side just after login, so a 409 means "not yet" --
  * retry (for up to ~30s).
+ *
+ * Runs once per signed-in user -- not whenever Privy hands out a new
+ * getAccessToken function -- so moving between pages never drops back to a
+ * loading screen.
  */
-function useAccountSetup(enabled: boolean) {
+function useAccountSetup(enabled: boolean, userId: string | undefined) {
   const { getAccessToken } = usePrivy();
+  const tokenRef = useRef(getAccessToken);
+  tokenRef.current = getAccessToken;
   const [state, setState] = useState<SetupState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !userId) {
       setState({ status: "loading" });
       return;
     }
@@ -35,7 +42,7 @@ function useAccountSetup(enabled: boolean) {
     (async () => {
       for (let i = 0; i < 20 && !cancelled; i++) {
         try {
-          const token = await getAccessToken();
+          const token = await tokenRef.current();
           const res = await fetch("/api/me", {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
@@ -57,7 +64,7 @@ function useAccountSetup(enabled: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, attempt, getAccessToken]);
+  }, [enabled, userId, attempt]);
 
   const setMe = useCallback((me: Me) => setState({ status: "ready", me }), []);
   return { state, setMe, retry: () => setAttempt((a) => a + 1) };
@@ -65,9 +72,10 @@ function useAccountSetup(enabled: boolean) {
 
 /** Signed out -> landing page. Signed in -> setup -> pick viewer/creator once -> the app. */
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { ready, authenticated, getAccessToken } = usePrivy();
-  const { state, setMe, retry } = useAccountSetup(ready && authenticated);
+  const { ready, authenticated, user, getAccessToken } = usePrivy();
+  const { state, setMe, retry } = useAccountSetup(ready && authenticated, user?.id);
 
+  // Viewer or creator is chosen once, at sign-up, and can't be changed.
   const setMode = useCallback(
     async (mode: Mode) => {
       const token = await getAccessToken();
@@ -82,26 +90,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     [getAccessToken, state, setMe]
   );
 
-  if (!ready) {
-    return (
-      <CenterScreen>
-        <Wordmark className="animate-pulse" />
-      </CenterScreen>
-    );
-  }
+  // Only the very first load shows the app skeleton.
+  if (!ready) return <AppSkeleton />;
 
   if (!authenticated) return <Landing />;
 
-  if (state.status === "loading") {
-    return (
-      <CenterScreen>
-        <Wordmark />
-        <p className="text-muted" role="status">
-          Setting up your account...
-        </p>
-      </CenterScreen>
-    );
-  }
+  if (state.status === "loading") return <AppSkeleton />;
 
   if (state.status === "error") {
     return (
@@ -118,7 +112,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (state.me.mode === null) return <ModePicker onPick={setMode} />;
 
   return (
-    <AccountContext.Provider value={{ mode: state.me.mode, links: state.me.links, setMode }}>
+    <AccountContext.Provider
+      value={{ mode: state.me.mode, links: state.me.links, avatarUrl: state.me.avatarUrl, setMode }}
+    >
       {children}
     </AccountContext.Provider>
   );
@@ -170,8 +166,8 @@ export function ModePicker({ onPick }: { onPick: (mode: Mode) => Promise<void> }
           How will you use dripp?
         </h1>
         <p className="mt-3 text-muted">
-          This just sets up your home screen. Everyone can send and receive tips, and you can
-          change it any time in Profile.
+          This sets up your home screen, and it can&apos;t be changed later. Everyone can send
+          and receive tips either way.
         </p>
 
         <div role="radiogroup" aria-label="How you'll use dripp" className="mt-8 grid gap-3 sm:grid-cols-2">

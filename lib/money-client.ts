@@ -85,6 +85,16 @@ async function confirmOnce(
 
 const CONFIRM_ATTEMPTS = 3;
 
+// The smart wallet sends one operation at a time (a second one sent while
+// the first is in flight can collide on the account's nonce), so every send
+// in the app -- tips and automatic refunds -- queues here.
+let walletQueue: Promise<unknown> = Promise.resolve();
+function exclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const run = walletQueue.then(fn, fn);
+  walletQueue = run.catch(() => undefined);
+  return run;
+}
+
 /**
  * Sends a tip gas-free from the user's smart wallet:
  *   1. /api/tip/prepare -> a tip intent + the exact calls (transfer, or
@@ -121,7 +131,7 @@ export function useSendTip() {
 
       let txHash: `0x${string}`;
       try {
-        txHash = await client.sendTransaction({ calls });
+        txHash = await exclusive(() => client.sendTransaction({ calls }));
       } catch (err) {
         console.error("smart wallet send failed", err);
         throw new Error("We couldn't complete the payment. Check your balance and activity before trying again.");
@@ -239,4 +249,60 @@ export function useBalance() {
 
 export function useActivity(limit = 50) {
   return useMoneyQuery(`/api/activity?limit=${limit}`, (j) => j.items as ActivityItem[]);
+}
+
+export type ReturnedTips = { cents: number; handles: string[] };
+
+let refundsStarted = false;
+
+/**
+ * Once per page load: if tips this user escrowed for someone who didn't join
+ * within 30 days can be returned, returns them -- the smart wallet sends
+ * TipVault.refund (gas-free, no prompt; only the sender's own wallet can)
+ * and the server records it. Calls `onReturned` so the app can say so.
+ * Mounted by the signed-in app shell. If anything fails it simply tries
+ * again on the next load, and the reconcile job records refunds whose
+ * confirmation was missed.
+ */
+export function useAutoRefunds(onReturned: (returned: ReturnedTips) => void) {
+  const { client } = useSmartWallets();
+  const authedFetch = useAuthedFetch();
+
+  useEffect(() => {
+    if (!client || refundsStarted) return;
+    refundsStarted = true;
+    (async () => {
+      try {
+        const res = await authedFetch("/api/escrow/refunds");
+        if (!res.ok) return;
+        const due = (await res.json()) as ReturnedTips & { calls: Call[] };
+        if (!due.calls.length) return;
+
+        const txHash = await exclusive(() => client.sendTransaction({ calls: due.calls }));
+        // 422 = the transaction was mined without any refund in it (e.g. the
+        // creator claimed first), so nothing came back. Anything else means
+        // it went through, or is still confirming.
+        let returned = true;
+        for (let attempt = 0; attempt < CONFIRM_ATTEMPTS; attempt++) {
+          const conf = await authedFetch("/api/escrow/refunds/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ txHash }),
+          }).catch(() => null);
+          if (conf?.status === 200) break;
+          if (conf?.status === 422) {
+            returned = false;
+            break;
+          }
+          if (conf && conf.status >= 400 && conf.status < 500 && conf.status !== 429) break;
+          if (attempt < CONFIRM_ATTEMPTS - 1) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+        }
+        announceMoneyChanged();
+        if (returned) onReturned({ cents: due.cents, handles: due.handles });
+      } catch (err) {
+        console.error("automatic refund failed -- will retry on next load", err);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, authedFetch]);
 }

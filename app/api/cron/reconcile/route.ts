@@ -4,14 +4,21 @@ import { getAddress } from "viem";
 import { supabaseServer } from "@/lib/supabase";
 import { centsToUnits } from "@/lib/chain";
 import { settleEscrowClaims } from "@/lib/escrow-claims";
-import { escrowDepositsBetween, publicClient, usdcTransfersFrom } from "@/lib/wallet-server";
+import { anyRefundCandidates, recordRefunds } from "@/lib/escrow-refunds";
+import {
+  escrowDepositsBetween,
+  escrowRefundsBetween,
+  publicClient,
+  usdcTransfersFrom,
+} from "@/lib/wallet-server";
 
 /**
  * Background recovery job. Tips are normally recorded by /api/tip/confirm,
  * but the browser can close (or lose its connection) after the money moved
  * and before confirm succeeds. This job finds those payments onchain and
- * records them against their tip intents, and finishes escrow claims whose
- * result was never applied. Safe to run as often as you like: recording is
+ * records them against their tip intents, records escrow refunds whose
+ * confirmation was missed, and finishes escrow claims whose result was never
+ * applied. Safe to run as often as you like: recording is
  * idempotent (see record_tip in supabase/functions.sql).
  *
  * Call with `Authorization: Bearer $CRON_SECRET` -- what Vercel Cron sends --
@@ -107,6 +114,30 @@ export async function GET(req: NextRequest) {
     MAX_SENDERS
   );
   const hasEscrow = open.some((i) => i.kind === "escrow");
+  // Refunds only exist for escrow at least 30 days old; skip the scan if none is.
+  let scanRefunds = false;
+  try {
+    scanRefunds = await anyRefundCandidates();
+  } catch (err) {
+    console.error("reconcile: refund candidate check failed", err);
+  }
+
+  /** Records a refund log against the sender's account, if they're on dripp. */
+  async function recordRefundLog(log: Awaited<ReturnType<typeof escrowRefundsBetween>>[number]) {
+    const { handleHash, sender, amount } = log.args;
+    if (!handleHash || !sender || amount === undefined) return;
+    if (!log.transactionHash || log.logIndex === null || log.blockNumber === null) return;
+    const { data: user, error } = await db
+      .from("users")
+      .select("id")
+      .eq("wallet_address", sender.toLowerCase())
+      .maybeSingle();
+    if (error) throw error;
+    if (!user) return;
+    await recordRefunds(user.id, log.transactionHash, [
+      { handleHash, units: amount, logIndex: log.logIndex, blockNumber: log.blockNumber },
+    ]);
+  }
   const unitsOf = (i: OpenIntent) => centsToUnits(Math.round(Number(i.amount) * 100));
   const sameAddr = (a: string | null, b: string) => !!a && getAddress(a) === getAddress(b);
 
@@ -139,12 +170,13 @@ export async function GET(req: NextRequest) {
   let recorded = 0;
   let scannedTo = start - one;
   try {
-    if (senders.length || hasEscrow) {
+    if (senders.length || hasEscrow || scanRefunds) {
       for (let from = start; from <= end; from += logRange) {
         const to = from + logRange - one < end ? from + logRange - one : end;
-        const [transfers, deposits] = await Promise.all([
+        const [transfers, deposits, refunds] = await Promise.all([
           senders.length ? usdcTransfersFrom(senders, from, to) : Promise.resolve([]),
           hasEscrow ? escrowDepositsBetween(from, to) : Promise.resolve([]),
+          scanRefunds ? escrowRefundsBetween(from, to) : Promise.resolve([]),
         ]);
         for (const t of transfers) {
           const { from: sender, to: recipient, value } = t.args;
@@ -170,6 +202,7 @@ export async function GET(req: NextRequest) {
           );
           if (candidates.length && (await recordLog(candidates, d))) recorded++;
         }
+        for (const r of refunds) await recordRefundLog(r);
         scannedTo = to;
       }
     } else {

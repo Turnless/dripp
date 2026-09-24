@@ -118,6 +118,45 @@ create table if not exists sync_state (
   updated_at timestamptz not null default now()
 );
 
+-- 4d. handle lookup cache + rate limiting ---------------------------------
+-- Cached YouTube/Kick handle lookups, so tipping someone who hasn't joined
+-- doesn't spend platform API quota on every attempt -- and keeps working
+-- (for handles seen before) if the quota runs out. See lib/username-resolve.ts.
+create table if not exists handle_lookups (
+  platform text not null check (platform in ('youtube', 'kick')),
+  platform_username text not null check (platform_username = lower(platform_username)),
+  found boolean not null,
+  channel_id text,
+  checked_at timestamptz not null default now(),
+  primary key (platform, platform_username)
+);
+
+-- Per-user / per-IP request counters for API rate limiting (fixed window).
+-- Written only through hit_rate_limit in functions.sql, which also prunes
+-- old rows.
+create table if not exists rate_limits (
+  key text primary key,
+  window_start timestamptz not null,
+  count integer not null
+);
+
+-- 4e. channel-ID identity, avatars, escrow keys, refunds -------------------
+alter table platform_links add column if not exists channel_id text;
+alter table platform_links add column if not exists avatar_url text;
+create unique index if not exists platform_links_platform_channel_id_key
+  on platform_links (platform, channel_id);
+
+alter table pending_tips add column if not exists handle_hash text;
+alter table pending_tips add column if not exists refunded_at timestamptz;
+alter table pending_tips add column if not exists refund_tx_hash text;
+
+alter table escrow_claims add column if not exists handle_hash text;
+alter table escrow_claims add column if not exists legacy_handle boolean not null default false;
+
+alter table chain_logs drop constraint if exists chain_logs_kind_check;
+alter table chain_logs add constraint chain_logs_kind_check
+  check (kind in ('tip', 'escrow_deposit', 'escrow_refund', 'withdrawal_fee', 'withdrawal_payout'));
+
 -- 5. live tip alerts for the overlay -------------------------------------
 do $$ begin
   alter publication supabase_realtime add table tips;
@@ -134,6 +173,8 @@ alter table tip_intents enable row level security;
 alter table chain_logs enable row level security;
 alter table escrow_claims enable row level security;
 alter table sync_state enable row level security;
+alter table handle_lookups enable row level security;
+alter table rate_limits enable row level security;
 
 -- Note: some columns are NOT NULL in schema.sql but stay nullable here,
 -- because rows created before this migration have no value for them. New

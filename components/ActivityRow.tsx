@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowDownToLine, ArrowUpRight, Clock } from "lucide-react";
+import { ArrowDownLeft, ArrowDownToLine, ArrowUpRight, Clock, Undo2 } from "lucide-react";
 import { formatUsd } from "@/lib/format";
 import type { ActivityItem } from "@/lib/money-client";
 
@@ -22,7 +22,9 @@ export function ActivityRow({ item }: { item: ActivityItem }) {
   const detail =
     item.status === "waiting"
       ? "Waiting for them to join"
-      : item.status === "collected"
+      : item.status === "returned"
+        ? "Returned to you · they didn't join in 30 days"
+        : item.status === "collected"
         ? item.direction === "sent"
           ? "Collected"
           : "Collected when you joined"
@@ -30,10 +32,13 @@ export function ActivityRow({ item }: { item: ActivityItem }) {
           ? `Fee ${formatUsd(item.feeCents)}`
           : null;
 
+  const returned = item.status === "returned";
   const Icon =
     item.status === "waiting"
       ? Clock
-      : item.direction === "received"
+      : returned
+        ? Undo2
+        : item.direction === "received"
         ? ArrowDownLeft
         : item.direction === "withdrawn"
           ? ArrowDownToLine
@@ -56,8 +61,9 @@ export function ActivityRow({ item }: { item: ActivityItem }) {
           {detail ? ` · ${detail}` : ""}
         </p>
       </div>
-      <p className={`num shrink-0 font-semibold ${incoming ? "text-positive" : ""}`}>
-        {incoming ? "+" : "−"}
+      <p className={`num shrink-0 font-semibold ${incoming ? "text-positive" : returned ? "text-muted" : ""}`}>
+        {/* A returned tip left and came back: no sign, since the balance is unchanged. */}
+        {incoming ? "+" : returned ? "" : "−"}
         {formatUsd(item.cents)}
       </p>
     </div>

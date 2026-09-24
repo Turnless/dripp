@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 import { getAuthenticatedUser } from "@/lib/privy-server";
+import { rateLimit } from "@/lib/rate-limit";
 import { getUsdcBalanceUnits } from "@/lib/wallet-server";
 import { unitsToCents } from "@/lib/chain";
 
@@ -10,6 +11,8 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Please sign in again" }, { status: 401 });
   }
+  const limited = await rateLimit(req, "balance", user.id);
+  if (limited) return limited;
   try {
     const units = await getUsdcBalanceUnits(getAddress(user.wallet_address));
     return NextResponse.json({ cents: unitsToCents(units) });

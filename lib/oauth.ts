@@ -43,9 +43,16 @@ function safeEqual(a: Buffer, b: Buffer) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-export function signState(userId: string): { state: string; nonce: string } {
+/** Where the browser goes back to after linking -- only these two pages. */
+export type LinkReturnPath = "/creator" | "/profile";
+const RETURN_PATHS: LinkReturnPath[] = ["/creator", "/profile"];
+
+export function signState(
+  userId: string,
+  returnTo: LinkReturnPath = "/profile"
+): { state: string; nonce: string } {
   const nonce = crypto.randomBytes(16).toString("hex");
-  const payload = JSON.stringify({ userId, nonce, ts: Date.now() });
+  const payload = JSON.stringify({ userId, nonce, ts: Date.now(), returnTo });
   const sig = hmac(payload).toString("hex");
   const state = Buffer.from(JSON.stringify({ payload, sig })).toString("base64url");
   return { state, nonce };
@@ -54,7 +61,7 @@ export function signState(userId: string): { state: string; nonce: string } {
 export function verifyState(
   state: string,
   cookieNonce: string | undefined
-): { userId: string } | null {
+): { userId: string; returnTo: LinkReturnPath } | null {
   if (!cookieNonce) return null;
   try {
     const { payload, sig } = JSON.parse(
@@ -63,13 +70,13 @@ export function verifyState(
     if (typeof payload !== "string" || typeof sig !== "string") return null;
     if (!safeEqual(Buffer.from(sig, "hex"), hmac(payload))) return null;
 
-    const { userId, nonce, ts } = JSON.parse(payload);
+    const { userId, nonce, ts, returnTo } = JSON.parse(payload);
     if (typeof userId !== "string" || typeof nonce !== "string" || typeof ts !== "number") {
       return null;
     }
     if (Date.now() - ts > STATE_TTL_MS) return null;
     if (!safeEqual(Buffer.from(nonce), Buffer.from(cookieNonce))) return null;
-    return { userId };
+    return { userId, returnTo: RETURN_PATHS.includes(returnTo) ? returnTo : "/profile" };
   } catch {
     return null;
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthenticatedUser } from "@/lib/privy-server";
+import { rateLimit } from "@/lib/rate-limit";
 import { supabaseServer } from "@/lib/supabase";
 import { centsToUnits } from "@/lib/chain";
 import { findEscrowDeposits, findUsdcTransfers, type LogMatch } from "@/lib/wallet-server";
@@ -32,6 +33,8 @@ export async function POST(req: NextRequest) {
   if (!sender) {
     return NextResponse.json({ error: "Please sign in again" }, { status: 401 });
   }
+  const limited = await rateLimit(req, "tipConfirm", sender.id);
+  if (limited) return limited;
 
   const parsed = ConfirmSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

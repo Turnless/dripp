@@ -7,7 +7,20 @@ export function tipVaultAddress(): `0x${string}` | null {
 }
 
 /**
- * Escrow key for a platform handle. Must match TipVault.t.sol:
+ * Escrow key for a platform channel -- its permanent ID, not the handle, so
+ * a renamed or reassigned handle can't redirect escrowed tips. Used for every
+ * new escrow deposit. Must match TipVault.t.sol:
+ *   keccak256(abi.encodePacked(platform, "#", channelId))
+ * The "#" keeps these keys distinct from handle keys ("<platform>:<handle>").
+ */
+export function channelKey(platform: string, channelId: string): `0x${string}` {
+  return keccak256(encodePacked(["string", "string", "string"], [platform, "#", channelId]));
+}
+
+/**
+ * The previous escrow key, by platform handle -- deposits made before
+ * channel keys still sit under it, so a creator's claim releases both. Must
+ * match TipVault.t.sol:
  *   keccak256(abi.encodePacked(platform, ":", username))
  * `username` must already be normalized (lib/username-resolve.ts normalizeHandle).
  */

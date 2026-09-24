@@ -1,3 +1,4 @@
+import "server-only";
 import { PrivyClient } from "@privy-io/node";
 import { supabaseServer } from "./supabase";
 

@@ -1,6 +1,7 @@
+import "server-only";
 import { getAddress } from "viem";
 import { supabaseServer } from "./supabase";
-import { handleHash } from "./tipvault";
+import { channelKey, handleHash } from "./tipvault";
 import { readEscrowClaim, sendEscrowClaim, transactionKnown, type ClaimResult } from "./wallet-server";
 
 /**
@@ -11,8 +12,12 @@ import { readEscrowClaim, sendEscrowClaim, transactionKnown, type ClaimResult } 
  * Rows are only marked collected once its receipt is read, using the claim's
  * position onchain (see apply_escrow_claim in supabase/functions.sql). If
  * waiting for the receipt or the database update fails, the claim stays
- * unapplied and is finished by the next link attempt for that handle or by
+ * unapplied and is finished by the next link attempt for that channel or by
  * the reconcile job -- nothing is lost or marked collected early.
+ *
+ * A channel's escrow can sit under two keys: its channel key (every deposit
+ * since channel IDs) and the older handle key (deposits before). Linking
+ * claims both; see lib/tipvault.ts.
  */
 
 type Platform = "youtube" | "kick";
@@ -31,29 +36,44 @@ async function applyClaim(txHash: string, result: Exclude<ClaimResult, { status:
   if (error) throw error;
 }
 
+type ClaimRow = {
+  tx_hash: string;
+  platform: Platform;
+  platform_username: string;
+  handle_hash: string | null;
+  claimed_by: string;
+  created_at: string;
+};
+
+// Claims recorded before escrow keys were stored used the handle key.
+const keyOf = (row: ClaimRow) =>
+  (row.handle_hash ?? handleHash(row.platform, row.platform_username)) as `0x${string}`;
+
 /**
- * Applies every sent-but-unapplied claim (for one handle, or all of them).
- * Returns whether any is still unconfirmed, and how much the claims applied
- * now released to `forUserId`.
+ * Applies every sent-but-unapplied claim -- all of them, or only those for
+ * the given escrow keys on a platform. Returns whether any is still
+ * unconfirmed, and how much the claims applied now released to `forUserId`.
  */
 export async function settleEscrowClaims(
-  handle?: { platform: Platform; username: string },
+  filter?: { platform: Platform; keys: `0x${string}`[] },
   forUserId?: string
 ): Promise<{ unsettled: boolean; unitsForUser: bigint }> {
   let query = supabaseServer()
     .from("escrow_claims")
-    .select("tx_hash, platform, platform_username, claimed_by, created_at")
+    .select("tx_hash, platform, platform_username, handle_hash, claimed_by, created_at")
     .is("applied_at", null)
     .order("created_at", { ascending: true });
-  if (handle) query = query.eq("platform", handle.platform).eq("platform_username", handle.username);
-  const { data: rows, error } = await query;
+  if (filter) query = query.eq("platform", filter.platform);
+  const { data, error } = await query;
   if (error) throw error;
+  const wanted = filter ? new Set(filter.keys.map((k) => k.toLowerCase())) : null;
+  const rows = ((data ?? []) as ClaimRow[]).filter((row) => !wanted || wanted.has(keyOf(row).toLowerCase()));
 
   let unsettled = false;
   let unitsForUser = BigInt(0);
-  for (const row of rows ?? []) {
+  for (const row of rows) {
     const txHash = row.tx_hash as `0x${string}`;
-    let result = await readEscrowClaim(txHash, handleHash(row.platform, row.platform_username), 0);
+    let result = await readEscrowClaim(txHash, keyOf(row), 0);
     if (result.status === "pending") {
       const old = Date.now() - Date.parse(row.created_at) > DROPPED_AFTER_MS;
       if (old && !(await transactionKnown(txHash))) {
@@ -70,40 +90,52 @@ export async function settleEscrowClaims(
 }
 
 /**
- * Releases everything escrowed for a handle to `userId`'s wallet. Only call
- * after OAuth proved the user owns the handle. Returns the amount released
- * to them (0 if nothing was escrowed or the claim is still confirming).
+ * Releases everything escrowed for a channel to `userId`'s wallet: under its
+ * channel key, and under the handle key for deposits made before channel
+ * keys. Only call after OAuth proved the user owns the channel and currently
+ * holds the handle. Returns the amount released to them (0 if nothing was
+ * escrowed or the claims are still confirming).
  */
 export async function claimEscrowFor(
   platform: Platform,
   username: string,
+  channelId: string,
   userId: string,
   wallet: string
 ): Promise<bigint> {
-  const earlier = await settleEscrowClaims({ platform, username }, userId);
-  // A claim for this handle is still in flight: sending another would just
+  const keys = [
+    { hash: channelKey(platform, channelId), legacyHandle: false },
+    { hash: handleHash(platform, username), legacyHandle: true },
+  ];
+  const earlier = await settleEscrowClaims({ platform, keys: keys.map((k) => k.hash) }, userId);
+  // A claim for this channel is still in flight: sending another would just
   // revert (or race it). It'll be applied by the next attempt or the job.
   if (earlier.unsettled) return earlier.unitsForUser;
 
-  const hash = handleHash(platform, username);
-  const txHash = await sendEscrowClaim(hash, getAddress(wallet));
-  if (!txHash) return earlier.unitsForUser;
+  let released = earlier.unitsForUser;
+  for (const key of keys) {
+    const txHash = await sendEscrowClaim(key.hash, getAddress(wallet));
+    if (!txHash) continue;
 
-  const { error } = await supabaseServer().from("escrow_claims").insert({
-    tx_hash: txHash.toLowerCase(),
-    platform,
-    platform_username: username,
-    claimed_by: userId,
-  });
-  if (error) {
-    // The claim was sent, but without this row the tips it released won't be
-    // marked collected automatically. Loud, so it can be applied by hand.
-    console.error("escrow_claims insert failed -- apply this claim by hand", { txHash, platform, username, error });
-    return earlier.unitsForUser;
+    const { error } = await supabaseServer().from("escrow_claims").insert({
+      tx_hash: txHash.toLowerCase(),
+      platform,
+      platform_username: username,
+      handle_hash: key.hash,
+      legacy_handle: key.legacyHandle,
+      claimed_by: userId,
+    });
+    if (error) {
+      // The claim was sent, but without this row the tips it released won't
+      // be marked collected automatically. Loud, so it can be applied by hand.
+      console.error("escrow_claims insert failed -- apply this claim by hand", { txHash, platform, username, error });
+      continue;
+    }
+
+    const result = await readEscrowClaim(txHash, key.hash);
+    if (result.status === "pending") continue;
+    await applyClaim(txHash, result);
+    if (result.status === "claimed") released += result.units;
   }
-
-  const result = await readEscrowClaim(txHash, hash);
-  if (result.status === "pending") return earlier.unitsForUser;
-  await applyClaim(txHash, result);
-  return earlier.unitsForUser + (result.status === "claimed" ? result.units : BigInt(0));
+  return released;
 }
