@@ -100,7 +100,18 @@ rl.close();
 if (typed.toLowerCase() !== newOwner.slice(-6).toLowerCase()) fail("That doesn't match. Nothing was sent.");
 
 const wallet = createWalletClient({ account, chain, transport: http(rpc) });
-const hash = await wallet.writeContract({ address: vault, abi, functionName: "transferOwnership", args: [newOwner] });
+let hash;
+try {
+  hash = await wallet.writeContract({ address: vault, abi, functionName: "transferOwnership", args: [newOwner] });
+} catch (err) {
+  // Rejected before it reached the chain (e.g. by the RPC): nothing changed.
+  fail(
+    `The RPC rejected the transaction, so nothing was sent and the owner is unchanged.\n` +
+      `  Reason: ${err?.details || err?.shortMessage || err?.message || err}\n` +
+      `  It's safe to run this again. If it keeps failing, set MONAD_RPC_URL in .env.local\n` +
+      `  to another Monad mainnet RPC and retry.`
+  );
+}
 console.log(`\nSent: ${hash}\nWaiting for it to be included...`);
 const receipt = await pub.waitForTransactionReceipt({ hash });
 if (receipt.status !== "success") fail(`The transaction failed (${hash}). Ownership did not change.`);
