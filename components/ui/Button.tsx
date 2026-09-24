@@ -1,12 +1,13 @@
 import { forwardRef } from "react";
 import { Loader2 } from "lucide-react";
 
-type Variant = "primary" | "secondary" | "ghost" | "destructive";
+type Variant = "primary" | "secondary" | "outline" | "ghost" | "destructive";
 type Size = "md" | "lg";
 
 const variants: Record<Variant, string> = {
   primary: "bg-primary text-on-primary shadow-primary hover:bg-primary-hover",
   secondary: "glass-thin text-text hover:bg-text/5",
+  outline: "bg-transparent text-text ring-[1.5px] ring-inset ring-text hover:bg-text/[0.06]",
   ghost: "text-text hover:bg-text/5",
   destructive: "bg-negative text-white hover:brightness-110",
 };

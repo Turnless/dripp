@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AlertCircle, ArrowLeft, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
+import { Avatar } from "@/components/ui/Avatar";
 import { useAuthedFetch } from "@/lib/hooks";
 import { useSendTip } from "@/lib/money-client";
 import { formatUsd, parseUsdToCents } from "@/lib/format";
@@ -19,7 +20,7 @@ const PLATFORMS: { id: Platform; label: string }[] = [
   { id: "youtube", label: "YouTube" },
   { id: "kick", label: "Kick" },
 ];
-const QUICK_AMOUNTS = [100, 500, 1000, 2000];
+const QUICK_AMOUNTS = [100, 200, 500, 1000];
 
 const stepTransition = { type: "spring", bounce: 0, duration: 0.3 } as const;
 
@@ -80,6 +81,8 @@ export function SendFlow({
           {step === "amount" && (
             <AmountStep
               handle={cleanHandle}
+              platformName={PLATFORMS.find((p) => p.id === platform)!.label}
+              joined={lookup === "existing_user"}
               amountText={amountText}
               setAmountText={setAmountText}
               cents={cents}
@@ -288,6 +291,8 @@ function LookupStatus({ lookup, handle, platformName }: { lookup: Lookup; handle
 
 function AmountStep({
   handle,
+  platformName,
+  joined,
   amountText,
   setAmountText,
   cents,
@@ -295,6 +300,8 @@ function AmountStep({
   onNext,
 }: {
   handle: string;
+  platformName: string;
+  joined: boolean;
   amountText: string;
   setAmountText: (t: string) => void;
   cents: number | null;
@@ -310,13 +317,13 @@ function AmountStep({
         e.preventDefault();
         if (valid) onNext();
       }}
-      className="flex flex-col gap-6"
+      className="flex flex-col gap-5"
     >
-      <p className="text-center text-muted">To @{handle}</p>
+      <Recipient handle={handle} detail={`${platformName} · ${joined ? "On dripp" : "Hasn't joined yet"}`} />
 
-      <label className="flex items-center justify-center">
+      <label className="flex items-center justify-center py-2">
         <span className="sr-only">Amount in dollars</span>
-        <span className="num text-money text-muted" aria-hidden>
+        <span className="num text-[4rem] font-bold leading-none tracking-[-0.05em] text-muted" aria-hidden>
           $
         </span>
         <input
@@ -328,7 +335,7 @@ function AmountStep({
           inputMode="decimal"
           placeholder="0"
           size={Math.max(1, amountText.length)}
-          className="num w-auto min-w-[1ch] bg-transparent text-money outline-none placeholder:text-muted/50"
+          className="num w-auto min-w-[1ch] bg-transparent text-[4rem] font-extrabold leading-none tracking-[-0.05em] caret-text outline-none placeholder:text-muted/40"
         />
       </label>
 
@@ -338,8 +345,9 @@ function AmountStep({
             key={c}
             type="button"
             onClick={() => setAmountText(String(c / 100))}
-            className={`pressable glass-thin num h-11 rounded-full text-[0.9375rem] font-semibold ${
-              cents === c ? "ring-2 ring-emphasis" : ""
+            aria-pressed={cents === c}
+            className={`pressable num h-12 rounded-chip text-[0.9375rem] font-extrabold ${
+              cents === c ? "bg-brand ring-[1.5px] ring-inset ring-text" : "bg-text/[0.05] hover:bg-text/[0.08]"
             }`}
           >
             {formatUsd(c).replace(".00", "")}
@@ -347,8 +355,15 @@ function AmountStep({
         ))}
       </div>
 
-      <p className="min-h-5 text-center text-caption text-negative" role={tooBig ? "alert" : undefined}>
-        {tooBig ? `The most you can send at once is ${formatUsd(MAX_TIP_CENTS)}.` : ""}
+      <p
+        className={`min-h-5 text-center text-caption ${tooBig ? "text-negative" : "text-muted"}`}
+        role={tooBig ? "alert" : undefined}
+      >
+        {tooBig
+          ? `The most you can send at once is ${formatUsd(MAX_TIP_CENTS)}.`
+          : valid
+            ? `Free to send. @${handle} gets the full ${formatUsd(cents)}.`
+            : "Sending a tip is always free."}
       </p>
 
       <div className="flex gap-3">
@@ -356,10 +371,23 @@ function AmountStep({
           <ArrowLeft className="h-5 w-5" aria-hidden />
         </Button>
         <Button type="submit" size="lg" fullWidth disabled={!valid}>
-          Continue
+          Review tip
         </Button>
       </div>
     </form>
+  );
+}
+
+/** Who the tip is going to: initial, handle and platform. */
+function Recipient({ handle, detail }: { handle: string; detail: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-card bg-text/[0.04] p-3">
+      <Avatar src={null} name={handle} className="h-10 w-10" />
+      <div className="min-w-0">
+        <p className="truncate font-bold">@{handle}</p>
+        <p className="truncate text-caption text-muted">{detail}</p>
+      </div>
+    </div>
   );
 }
 
@@ -405,10 +433,8 @@ function ReviewStep({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="text-center">
-        <p className="text-muted">To @{handle}</p>
-        <p className="num mt-3 text-money">{formatUsd(cents)}</p>
-      </div>
+      <Recipient handle={handle} detail={`${platform === "kick" ? "Kick" : "YouTube"} · ${joined ? "On dripp" : "Hasn't joined yet"}`} />
+      <p className="num text-center text-[3.5rem] font-extrabold leading-none tracking-[-0.05em]">{formatUsd(cents)}</p>
 
       <dl className="flex flex-col gap-3 rounded-card border border-text/10 p-4 text-[0.9375rem]">
         <Row label="You send" value={formatUsd(cents)} />
@@ -474,29 +500,34 @@ function SentStep({
   }, [reduce]);
 
   return (
-    <div className="flex flex-col items-center gap-6 py-4 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-card bg-brand px-6 pb-6 pt-8 text-center text-text">
       <motion.span
         initial={reduce ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={reduce ? { duration: 0.15 } : { type: "spring", bounce: 0.3, duration: 0.45 }}
-        className="grid h-16 w-16 place-items-center rounded-full bg-primary text-on-primary"
+        className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-on-primary"
       >
-        {pending ? <Clock className="h-8 w-8" aria-hidden /> : <CheckCircle2 className="h-8 w-8" aria-hidden />}
+        {pending ? (
+          <Clock className="h-8 w-8" strokeWidth={2.4} aria-hidden />
+        ) : (
+          <Check className="h-9 w-9" strokeWidth={3} aria-hidden />
+        )}
       </motion.span>
-      <div>
-        <p className="num text-title-1">{pending ? formatUsd(cents) : "Sent!"}</p>
-        <p className="mt-2 text-muted" role="status">
-          {pending
-            ? `We're holding this for @${handle} until they join.`
-            : `${formatUsd(cents)} is on its way to @${handle}.`}
+      <p className="num mt-3 text-[3.25rem] font-extrabold leading-none tracking-[-0.05em]">{formatUsd(cents)}</p>
+      <div role="status">
+        <p className="font-semibold text-on-brand">
+          {pending ? `Waiting for @${handle}` : `Sent to @${handle}`}
+        </p>
+        <p className="mt-1 text-on-brand">
+          {pending ? "We'll hold it until they join and link their channel." : "It's already in their balance."}
         </p>
       </div>
-      <div className="flex w-full gap-3">
-        <Button variant="secondary" size="lg" fullWidth onClick={onAgain}>
-          Send again
-        </Button>
+      <div className="mt-4 flex w-full flex-col gap-2.5">
         <Button size="lg" fullWidth onClick={onDone}>
           Done
+        </Button>
+        <Button variant="outline" size="lg" fullWidth onClick={onAgain}>
+          Send another
         </Button>
       </div>
     </div>

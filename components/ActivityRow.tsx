@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowDownToLine, ArrowUpRight, Clock, Undo2 } from "lucide-react";
+import { ArrowDownToLine } from "lucide-react";
 import { formatUsd } from "@/lib/format";
 import type { ActivityItem } from "@/lib/money-client";
 
@@ -16,56 +16,56 @@ function relativeTime(iso: string): string {
 
 /** One history entry. Shows handles and dollars only -- never addresses or hashes. */
 export function ActivityRow({ item }: { item: ActivityItem }) {
-  const who = item.counterparty ?? "a dripp user";
-  const title =
-    item.direction === "withdrawn" ? "Withdrawal" : item.direction === "sent" ? `To ${who}` : `From ${who}`;
-  const detail =
-    item.status === "waiting"
-      ? "Waiting for them to join"
-      : item.status === "returned"
-        ? "Returned to you · they didn't join in 30 days"
-        : item.status === "collected"
-        ? item.direction === "sent"
-          ? "Collected"
-          : "Collected when you joined"
-        : item.direction === "withdrawn" && item.feeCents
-          ? `Fee ${formatUsd(item.feeCents)}`
-          : null;
-
-  const returned = item.status === "returned";
-  const Icon =
-    item.status === "waiting"
-      ? Clock
-      : returned
-        ? Undo2
-        : item.direction === "received"
-        ? ArrowDownLeft
-        : item.direction === "withdrawn"
-          ? ArrowDownToLine
-          : ArrowUpRight;
+  const withdrawal = item.direction === "withdrawn";
   const incoming = item.direction === "received";
+  const waiting = item.status === "waiting";
+  const returned = item.status === "returned";
+  const title = withdrawal ? "Withdrawal" : (item.counterparty ?? "A dripp user");
+  const when = relativeTime(item.at);
+
+  const detail = withdrawal
+    ? item.feeCents
+      ? `Fee ${formatUsd(item.feeCents)} · ${when}`
+      : when
+    : waiting
+      ? `${formatUsd(item.cents)} · Waiting for them to join`
+      : returned
+        ? `${formatUsd(item.cents)} · Not collected in 30 days`
+        : item.status === "collected"
+          ? `${incoming ? "Collected when you joined" : "Collected"} · ${when}`
+          : `${incoming ? "Tipped you" : "You tipped"} · ${when}`;
+
+  const initial = (title.replace(/^@/, "").charAt(0) || "D").toUpperCase();
+  const avatarTone = withdrawal
+    ? "bg-primary text-on-primary"
+    : incoming
+      ? "bg-positive/10 text-positive"
+      : waiting
+        ? "bg-tint text-on-brand"
+        : "bg-text/[0.06] text-text";
 
   return (
     <div className="flex items-center gap-3 px-4 py-3.5">
-      <span
-        className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${
-          incoming ? "bg-positive/10 text-positive" : item.status === "waiting" ? "bg-caution/10 text-caution" : "bg-tint text-emphasis"
-        }`}
-      >
-        <Icon className="h-5 w-5" strokeWidth={1.9} aria-hidden />
+      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full font-extrabold ${avatarTone}`}>
+        {withdrawal ? <ArrowDownToLine className="h-5 w-5" strokeWidth={2.2} aria-hidden /> : initial}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{title}</p>
-        <p className="truncate text-caption text-muted">
-          {relativeTime(item.at)}
-          {detail ? ` · ${detail}` : ""}
-        </p>
+        <p className="truncate font-bold">{title}</p>
+        <p className="truncate text-caption text-muted">{detail}</p>
       </div>
-      <p className={`num shrink-0 font-semibold ${incoming ? "text-positive" : returned ? "text-muted" : ""}`}>
-        {/* A returned tip left and came back: no sign, since the balance is unchanged. */}
-        {incoming ? "+" : returned ? "" : "−"}
-        {formatUsd(item.cents)}
-      </p>
+      {waiting ? (
+        <span className="shrink-0 rounded-full bg-tint px-2.5 py-1 text-caption font-bold text-on-brand">Waiting</span>
+      ) : returned ? (
+        // A returned tip left and came back: the balance is unchanged.
+        <span className="shrink-0 rounded-full bg-text/[0.07] px-2.5 py-1 text-caption font-bold text-muted">
+          Returned
+        </span>
+      ) : (
+        <p className={`num shrink-0 font-extrabold ${incoming ? "text-positive" : ""}`}>
+          {incoming ? "+" : "−"}
+          {formatUsd(item.cents)}
+        </p>
+      )}
     </div>
   );
 }

@@ -106,7 +106,7 @@ export default function ActivityPage() {
         <Stagger key={filter} className="flex flex-col gap-5">
           {groups.map((g) => (
             <StaggerItem key={g.label} className="flex flex-col gap-2">
-              <h2 className="px-1 text-caption font-semibold text-muted">{g.label}</h2>
+              <h2 className="px-1 text-label uppercase text-muted">{g.label}</h2>
               <GlassCard className="overflow-hidden">
                 <ul className="divide-y divide-deep/5">
                   {g.items.map((item) => (
