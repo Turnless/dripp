@@ -3,7 +3,12 @@
 import { createContext, useContext } from "react";
 
 export type Mode = "viewer" | "creator";
-export type PlatformLink = { platform: "youtube" | "kick"; platform_username: string; avatar_url: string | null };
+export type PlatformLink = {
+  platform: "youtube" | "kick";
+  platform_username: string;
+  avatar_url: string | null;
+  needs_relink: boolean;
+};
 
 export type Account = {
   mode: Mode | null;
