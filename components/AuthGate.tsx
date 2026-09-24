@@ -113,17 +113,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     [getAccessToken, state, setMe]
   );
 
-  const refreshVerification = useCallback(async (): Promise<Verification> => {
-    const token = await getAccessToken();
-    const res = await fetch("/api/me/verify", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(await readError(res));
-    const { verification } = (await res.json()) as { verification: Verification };
-    if (state.status === "ready") setMe({ ...state.me, verification });
-    return verification;
-  }, [getAccessToken, state, setMe]);
+  const setVerification = useCallback(
+    (verification: Verification) => {
+      if (state.status === "ready") setMe({ ...state.me, verification });
+    },
+    [state, setMe]
+  );
 
   // Only the very first load shows the app skeleton.
   if (!ready) return <AppSkeleton />;
@@ -155,7 +150,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         profileVisibility: state.me.profileVisibility,
         canWithdrawToAddress: !!state.me.canWithdrawToAddress,
         verification: state.me.verification ?? { verified: false, via: null },
-        refreshVerification,
+        setVerification,
         setMode,
         setProfileVisibility,
       }}

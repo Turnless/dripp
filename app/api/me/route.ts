@@ -4,7 +4,7 @@ import { getAuthenticatedPrivyId, getAuthenticatedUser, privy } from "@/lib/priv
 import { supabaseServer } from "@/lib/supabase";
 import { mayWithdrawToAddress } from "@/lib/withdraw-access";
 import { VisibilityPatchSchema, visibilityColumns, visibilityFromRow } from "@/lib/profile-visibility";
-import { recordPhoneIfLinked, verificationFor, type Verification } from "@/lib/viewer-verification";
+import { verificationFor, type Verification } from "@/lib/viewer-verification";
 import type { LinkedAccount } from "@privy-io/node";
 
 type LinkedAccountGoogleOAuth = Extract<LinkedAccount, { type: "google_oauth" }>;
@@ -84,10 +84,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Could not set up your account" }, { status: 500 });
   }
 
-  // A phone verified through Privy counts as viewer verification.
   let verification: Verification = { verified: false, via: null };
   try {
-    await recordPhoneIfLinked(user.id, privyUser);
     verification = await verificationFor(user.id);
   } catch (err) {
     // Sign-in must not fail on this (e.g. before the migration has run).

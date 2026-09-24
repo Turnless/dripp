@@ -31,6 +31,10 @@ create table users (
   -- money also counts, but is computed, not stored (viewer_verifications).
   human_verified_at timestamptz,
   human_verified_via text check (human_verified_via in ('youtube', 'phone', 'topup')),
+  -- The phone that verified this user, as a keyed hash (HMAC-SHA256 with
+  -- PHONE_HASH_SECRET, lib/phone-verify.ts) -- never the number itself.
+  -- Unique: one phone can verify only one account.
+  phone_hash text unique,
   created_at timestamptz not null default now()
 );
 

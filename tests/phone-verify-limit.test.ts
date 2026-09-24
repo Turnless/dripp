@@ -25,13 +25,13 @@ beforeEach(() => {
 });
 
 describe("phone verification limits", () => {
-  it("allows one attempt per 5 minutes, then 3 a day per person, 10 per network, 100 in total", async () => {
-    expect(await phoneVerifyLimit(req(), "u1")).toBeNull();
+  it("allows one attempt per 5 minutes, then 3 a day per person and per number, 10 per network, 100 in total", async () => {
+    expect(await phoneVerifyLimit(req(), "u1", "hash1")).toBeNull();
     expect(db.calls).toEqual([
       { p_keys: ["phoneVerify5m:u:u1"], p_limits: [1], p_window_seconds: 300 },
       {
-        p_keys: ["phoneVerifyDay:u:u1", "phoneVerifyDay:all", "phoneVerifyDay:ip:1.2.3.4"],
-        p_limits: [3, 100, 10],
+        p_keys: ["phoneVerifyDay:u:u1", "phoneVerifyDay:all", "phoneVerifyDay:phone:hash1", "phoneVerifyDay:ip:1.2.3.4"],
+        p_limits: [3, 100, 3, 10],
         p_window_seconds: 86400,
       },
     ]);

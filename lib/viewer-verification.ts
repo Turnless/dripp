@@ -1,5 +1,4 @@
 import "server-only";
-import type { User as PrivyUser } from "@privy-io/node";
 import { supabaseServer } from "@/lib/supabase";
 import { passesYoutubeViewerCheck, type VerifiedVia, type YoutubeViewerFacts } from "@/lib/bot-check";
 
@@ -36,11 +35,31 @@ export async function recordVerification(userId: string, via: "youtube" | "phone
   if (error) throw error;
 }
 
-/** A phone verified through Privy (linked to the Privy account) is a proof. */
-export async function recordPhoneIfLinked(userId: string, privyUser: PrivyUser): Promise<void> {
-  if (privyUser.linked_accounts.some((a) => a.type === "phone")) {
-    await recordVerification(userId, "phone");
+/** Is this phone (hash) already verifying a different account? */
+export async function phoneUsedByOther(userId: string, hash: string): Promise<boolean> {
+  const { data, error } = await supabaseServer()
+    .from("users")
+    .select("id")
+    .eq("phone_hash", hash)
+    .neq("id", userId)
+    .limit(1);
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+/**
+ * Records a verified phone (by hash) and the 'phone' verification. Returns
+ * "taken" if another account verified this phone first (the unique index
+ * on users.phone_hash settles a race).
+ */
+export async function recordPhoneVerification(userId: string, hash: string): Promise<"recorded" | "taken"> {
+  const { error } = await supabaseServer().from("users").update({ phone_hash: hash }).eq("id", userId);
+  if (error) {
+    if ((error as { code?: string }).code === "23505") return "taken";
+    throw error;
   }
+  await recordVerification(userId, "phone");
+  return "recorded";
 }
 
 /**

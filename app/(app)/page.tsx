@@ -190,12 +190,15 @@ function Spotlight({ items, week }: { items: ActivityItem[] | null; week: WeekSu
 
   if (!verification.verified) {
     return (
-      <SpotlightCard
-        onClick={verifyPhone.start}
-        icon={ShieldCheck}
-        title="Verify to receive rewards"
-        body={verifyPhone.error ?? "Streamers can include you when they reward their viewers."}
-      />
+      <>
+        <SpotlightCard
+          onClick={verifyPhone.start}
+          icon={ShieldCheck}
+          title="Verify to receive rewards"
+          body="Streamers can include you when they reward their viewers."
+        />
+        {verifyPhone.sheet}
+      </>
     );
   }
 

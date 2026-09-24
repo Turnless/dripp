@@ -99,7 +99,7 @@ app/                          Next.js App Router
     tip/confirm/              POST -- verify the tx onchain against the intent, then record the tip
     withdraw/prepare|confirm/ POST -- payout + 1% fee in one operation (to a wallet address, testers only, until Mercuryo)
     creator/stats/            GET -- live subscriber count of the caller's linked channel
-    me/verify/                POST -- re-check viewer verification (after verifying a phone)
+    me/verify/start|check/    POST -- send a phone code (WhatsApp/SMS, strictly limited); check it
     creator/tippers/          GET -- 30-day verified / not verified / suspicious breakdown of the caller's tippers
     bot-check/                POST -- verification + swarm check for a reward drop's recipients
     balance/                  GET -- balance in cents
@@ -121,7 +121,8 @@ lib/
   withdraw-plan.ts            Withdrawal calls: 1% fee to treasury + payout, batched
   withdraw-access.ts          Who may withdraw to a wallet address (WITHDRAW_TO_ADDRESS_EMAILS)
   bot-check.ts                Viewer verification + bot/real rules (pure, tested)
-  viewer-verification.ts      YouTube check at link time, phone via Privy, reading verification
+  viewer-verification.ts      YouTube check at link time, recording a verified phone, reading verification
+  phone-verify.ts             Twilio Verify (WhatsApp / SMS), number format, keyed phone hash
   tipper-check.ts             Loads a creator's tipper signals and classifies them
   profile-visibility.ts       What the public profile shows (the "What people see" options)
   tipvault.ts                 TipVault ABI + handle hash
@@ -174,29 +175,36 @@ After pulling changes that touch `supabase/`, run `migrate.sql` then
 ## Viewer verification (phone)
 
 Viewers who don't pass the YouTube check when they link a channel are asked
-to verify a phone number through Privy's own popup. dripp pays for every
-code, so attempts are strictly limited before the popup opens
-(`/api/me/verify/start`, `phoneVerifyLimit` in `lib/rate-limit.ts`): 1 per 5
-minutes and 3 a day per person, 10 a day per network, and
+to verify a phone number. dripp sends the code itself through **Twilio
+Verify**, by **WhatsApp or SMS** (the viewer picks), so it works in the
+countries Twilio covers. Privy's phone login isn't used.
+
+dripp pays for every code, so the server checks everything before sending
+(`/api/me/verify/start`, `phoneVerifyLimit` in `lib/rate-limit.ts`): not
+verified yet, a real-looking international number, not already verifying
+another account, and within the limits -- 1 attempt per 5 minutes and 3 a
+day per person, 3 a day per number, 10 a day per network, and
 `PHONE_VERIFY_DAILY_CAP` (default 100) a day in total. If the limiter can't
-be reached, no code is sent.
+be reached, nothing is sent. Code guesses are limited too (and Twilio stops
+a code after 5 wrong tries).
 
-Turn it on once:
+Numbers are never stored: only a keyed hash (`users.phone_hash`, unique),
+which is what stops one phone verifying two accounts.
 
-1. Privy dashboard -> your app -> **Login methods**: enable **SMS**.
-   Sign-in stays Google-only, because `app/providers.tsx` sets
-   `loginMethods: ["google"]`; SMS is only used to *link* a phone.
-2. In the same place, restrict the allowed countries to the ones you serve,
-   turn on any fraud / rate-limit protection Privy offers, and set a billing
-   alert. dripp's limits gate the app's button; Privy sends the code itself.
-3. Test it: Profile -> "One more step" -> **Verify phone**. The card should
-   switch to **Verified**.
+Set it up once:
 
-Privy's SMS only reaches the US and Canada. WhatsApp delivery is a Privy
-dashboard option in `@privy-io/react-auth` 2.x/3.x; this app is on 1.x, so
-WhatsApp needs that upgrade (it touches sign-in and the smart wallets, so
-test tipping end to end after it). The app already accepts a phone verified
-either way.
+1. Create a Twilio account, then **Verify -> Services -> Create**. Turn on
+   the **WhatsApp** and **SMS** channels. WhatsApp codes can start on
+   Twilio's own sender; check the WhatsApp settings in the console for your
+   account.
+2. In the console, restrict **Geo permissions** to the countries you serve
+   and turn on **Fraud Guard** (SMS pumping protection), then set a usage
+   alert / spending limit under billing.
+3. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID`
+   and `PHONE_HASH_SECRET` (and optionally `PHONE_VERIFY_DAILY_CAP`) in
+   Vercel -- server-only -- and redeploy.
+4. Test: Profile -> "One more step" -> **Verify phone** -> WhatsApp -> enter
+   the code. The card should switch to **Verified**.
 
 ## Gas-free transfers setup
 

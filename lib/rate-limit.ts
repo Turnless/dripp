@@ -32,6 +32,9 @@ export const LIMITS = {
   creatorStats: { perUser: 30, perIp: 150, windowSeconds: 60 },
   // Once per reward drop, before sending (up to 50 handles each).
   botCheck: { perUser: 10, perIp: 50, windowSeconds: 60 },
+  // Entering a phone verification code: 10 guesses per 10 minutes (Twilio
+  // also refuses a code after 5 wrong tries).
+  phoneCheck: { perUser: 10, perIp: 30, windowSeconds: 10 * 60 },
 } satisfies Record<string, Limit>;
 
 function clientIp(req: Request): string | null {
@@ -78,25 +81,29 @@ export async function rateLimit(
 }
 
 /**
- * Phone verification sends a paid message (SMS / WhatsApp) that dripp pays
- * for, so it's limited strictly -- and, unlike rateLimit(), fails CLOSED:
- * if the limiter can't be reached, no code is sent.
+ * Phone verification sends a paid message (WhatsApp / SMS through Twilio)
+ * that dripp pays for, so it's limited strictly -- and, unlike rateLimit(),
+ * fails CLOSED: if the limiter can't be reached, no code is sent.
  *   - per person: 1 attempt every 5 minutes, and 3 a day
+ *   - per phone number: 3 a day (so no one can flood someone else's phone)
  *   - per network (IP): 10 a day
  *   - everyone together: PHONE_VERIFY_DAILY_CAP a day (default 100)
  * Returns a response to send back when refused, or null to carry on.
- *
- * This gates the app's "Verify phone" button. Privy sends the code itself,
- * so also set its own limits / allowed countries in the Privy dashboard.
+ * dripp's server is what sends the code, so this is a hard gate.
  */
 export const PHONE_VERIFY_LIMITS = {
   perUserShort: { limit: 1, windowSeconds: 5 * 60 },
   perUserDaily: 3,
+  perPhoneDaily: 3,
   perIpDaily: 10,
   defaultGlobalDaily: 100,
 };
 
-export async function phoneVerifyLimit(req: Request, userId: string): Promise<NextResponse | null> {
+export async function phoneVerifyLimit(
+  req: Request,
+  userId: string,
+  phoneKey?: string
+): Promise<NextResponse | null> {
   const db = supabaseServer();
   const refuse = (error: string, retryAfter: number, status = 429) =>
     NextResponse.json({ error }, { status, headers: { "Retry-After": String(retryAfter) } });
@@ -117,6 +124,10 @@ export async function phoneVerifyLimit(req: Request, userId: string): Promise<Ne
   const globalCap = Number(process.env.PHONE_VERIFY_DAILY_CAP) || PHONE_VERIFY_LIMITS.defaultGlobalDaily;
   const keys = [`phoneVerifyDay:u:${userId}`, "phoneVerifyDay:all"];
   const limits = [PHONE_VERIFY_LIMITS.perUserDaily, globalCap];
+  if (phoneKey) {
+    keys.push(`phoneVerifyDay:phone:${phoneKey}`);
+    limits.push(PHONE_VERIFY_LIMITS.perPhoneDaily);
+  }
   const ip = clientIp(req);
   if (ip) {
     keys.push(`phoneVerifyDay:ip:${ip}`);
