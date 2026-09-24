@@ -99,10 +99,42 @@ const typed = (await rl.question(`\nTo confirm, type the LAST 6 characters of th
 rl.close();
 if (typed.toLowerCase() !== newOwner.slice(-6).toLowerCase()) fail("That doesn't match. Nothing was sent.");
 
+// Monad reserves gas limit x max fee from the sender before running a
+// transaction, and a node repeats its cached rejection for a byte-identical
+// retry. So: size gas explicitly, check the reserve is covered, and vary the
+// fee by a few wei each run so a retry is always a new transaction.
+const gasEstimate = await pub.estimateContractGas({
+  address: vault,
+  abi,
+  functionName: "transferOwnership",
+  args: [newOwner],
+  account: account.address,
+});
+const gasLimit = (gasEstimate * 13n) / 10n;
+const fees = await pub.estimateFeesPerGas();
+const maxFeePerGas = fees.maxFeePerGas + BigInt(Date.now() % 1_000_000);
+const maxPriorityFeePerGas = fees.maxPriorityFeePerGas;
+const reserve = gasLimit * maxFeePerGas;
+const balanceNow = await pub.getBalance({ address: account.address });
+if (balanceNow < reserve) {
+  fail(
+    `Monad reserves ${formatEther(reserve)} MON for this transaction, but ${account.address} has ` +
+      `${formatEther(balanceNow)} MON. Add at least ${formatEther(reserve - balanceNow)} MON and run this again.`
+  );
+}
+
 const wallet = createWalletClient({ account, chain, transport: http(rpc) });
 let hash;
 try {
-  hash = await wallet.writeContract({ address: vault, abi, functionName: "transferOwnership", args: [newOwner] });
+  hash = await wallet.writeContract({
+    address: vault,
+    abi,
+    functionName: "transferOwnership",
+    args: [newOwner],
+    gas: gasLimit,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+  });
 } catch (err) {
   // Rejected before it reached the chain (e.g. by the RPC): nothing changed.
   fail(
