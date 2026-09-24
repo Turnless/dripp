@@ -14,15 +14,17 @@ import { monad } from "@/lib/chain";
  * (see lib/oauth.ts for why platform linking uses a separate, lighter flow
  * instead of a second full auth system).
  *
- * `appearance` and `embeddedWallets.showWalletUIs` were checked against the
- * installed @privy-io/react-auth@1.99 types. showWalletUIs: false hides
- * Privy's wallet confirmation popups -- required by the invisible-blockchain
- * rule in CLAUDE.md.
+ * Config shape checked against the installed @privy-io/react-auth@3.45 types:
+ * since 2.x, `createOnLogin` sits under `embeddedWallets.ethereum`.
+ * showWalletUIs: false hides Privy's wallet confirmation popups -- required
+ * by the invisible-blockchain rule in CLAUDE.md -- and still applies to
+ * smart-wallet sends (per-call `uiOptions` could override it; we never pass
+ * any).
  *
  * SmartWalletsProvider (native Privy smart wallets) wraps each user's
  * embedded wallet in a smart account whose gas is paid by the paymaster
  * configured in the Privy dashboard. Import path + API confirmed in the
- * installed @privy-io/react-auth@1.99.1 types (dist/dts/smart-wallets.d.ts)
+ * installed @privy-io/react-auth@3.45 types (dist/dts/smart-wallets.d.ts)
  * and https://docs.privy.io/wallets/using-wallets/evm-smart-wallets/overview
  *
  * *** VERIFY BEFORE USE ***
@@ -38,7 +40,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       config={{
         loginMethods: ["google"],
         embeddedWallets: {
-          createOnLogin: "all-users",
+          ethereum: { createOnLogin: "all-users" },
           showWalletUIs: false,
         },
         defaultChain: monad,

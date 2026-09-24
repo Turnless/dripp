@@ -33,7 +33,7 @@ export function useVerifyPhone() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { linkPhone } = useLinkAccount({
-    onSuccess: async (_user, _method, linkedAccount) => {
+    onSuccess: async ({ linkedAccount }) => {
       // Any verified phone counts, whether the code came by SMS or WhatsApp.
       if (linkedAccount.type !== "phone") return;
       try {

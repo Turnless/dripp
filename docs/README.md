@@ -48,6 +48,11 @@ never also be refunded).
 - `lib/kick.ts` and the Kick branch of the platform link/callback routes --
   Kick's public API is newer than YouTube's; confirm endpoint paths and field
   names against Kick's current docs (marked `*** VERIFY BEFORE USE ***`).
+- `@privy-io/react-auth` is on 3.x (upgraded from 1.99). Since 2.x,
+  `createOnLogin` lives under `embeddedWallets.ethereum`; `next.config.js`
+  marks Privy's optional Farcaster/Solana/Abstract add-ons as absent so the
+  build doesn't fail on them. If a new Privy version fails to build with
+  "Module not found" for another optional add-on, add it to that list.
 - After upgrading `@privy-io/react-auth` or changing the bundler/paymaster
   provider, re-check the smart-wallet code in `app/providers.tsx`,
   `lib/money-client.ts` and `lib/wallet-server.ts` against
@@ -192,11 +197,10 @@ Turn it on once:
 3. Test it: Profile -> "One more step" -> **Verify phone**. The card should
    switch to **Verified**.
 
-Privy's SMS only reaches the US and Canada. WhatsApp delivery is a Privy
-dashboard option in `@privy-io/react-auth` 2.x/3.x; this app is on 1.x, so
-WhatsApp needs that upgrade (it touches sign-in and the smart wallets, so
-test tipping end to end after it). The app already accepts a phone verified
-either way.
+Privy's SMS only reaches the US and Canada, so also turn on **WhatsApp**
+delivery for phone codes in the same Privy settings (supported since
+`@privy-io/react-auth` 2.x; this app is on 3.x). The app accepts a phone
+verified either way.
 
 ## Gas-free transfers setup
 
