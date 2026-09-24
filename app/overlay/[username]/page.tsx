@@ -61,19 +61,15 @@ export default function OverlayPage({
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, y: 60, filter: "blur(10px)" }}
             transition={reduce ? { duration: 0.2 } : { type: "spring", bounce: 0, duration: 0.45 }}
-            className="flex items-center gap-5 rounded-sheet border border-white/15 px-8 py-5 text-white shadow-[0_24px_60px_rgba(0,0,0,0.45)]"
-            style={{
-              background: "rgba(2, 26, 19, 0.82)",
-              backdropFilter: "blur(24px) saturate(160%)",
-              WebkitBackdropFilter: "blur(24px) saturate(160%)",
-            }}
+            // Coin yellow with an ink outline stays readable over any footage.
+            className="flex items-center gap-5 rounded-sheet bg-brand px-8 py-5 text-text shadow-[0_0_0_4px_rgb(17_17_17),0_24px_60px_rgba(0,0,0,0.45)]"
           >
-            <span className="grid h-14 w-14 place-items-center rounded-full bg-primary">
+            <span className="grid h-14 w-14 place-items-center rounded-full bg-primary text-on-primary">
               <Droplet className="h-7 w-7" strokeWidth={2.25} aria-hidden />
             </span>
             <div>
-              <p className="text-lg font-medium text-white/80">New tip</p>
-              <p className="num text-5xl font-semibold tracking-[-0.03em]">{formatUsd(alert.cents)}</p>
+              <p className="text-lg font-semibold text-on-brand">New tip</p>
+              <p className="num text-5xl font-extrabold tracking-[-0.045em]">{formatUsd(alert.cents)}</p>
             </div>
           </motion.div>
         )}

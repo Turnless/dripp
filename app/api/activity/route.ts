@@ -15,10 +15,13 @@ export type ActivityItem = {
 
 const toCents = (amount: string | number) => Math.round(Number(amount) * 100);
 
+export type WeekSummary = { cents: number; count: number };
+
 /**
  * The signed-in user's history: direct tips (sent + received), escrowed tips
  * they sent (waiting / collected), escrowed tips they collected, and
  * withdrawals. Counterparties are shown by platform handle, never by address.
+ * With `?week=1` it also returns what they received in the last 7 days.
  */
 export async function GET(req: NextRequest) {
   const me = await getAuthenticatedUser(req);
@@ -115,5 +118,18 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => (a.at < b.at ? 1 : -1))
     .slice(0, limit);
 
-  return NextResponse.json({ items });
+  const week = req.nextUrl.searchParams.get("week") === "1" ? await weekReceived(me.id) : undefined;
+  return NextResponse.json({ items, week });
+}
+
+/** Tips received in the last 7 days: direct tips plus escrowed tips collected. */
+async function weekReceived(userId: string): Promise<WeekSummary> {
+  const db = supabaseServer();
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const [direct, collected] = await Promise.all([
+    db.from("tips").select("amount").eq("recipient_id", userId).gte("created_at", since),
+    db.from("pending_tips").select("amount").eq("claimed_by", userId).gte("claimed_at", since),
+  ]);
+  const rows = [...(direct.data ?? []), ...(collected.data ?? [])];
+  return { cents: rows.reduce((sum, r) => sum + toCents(r.amount), 0), count: rows.length };
 }

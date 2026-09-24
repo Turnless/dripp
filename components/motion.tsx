@@ -136,7 +136,7 @@ export function CountUp({
 
 /**
  * Headline that rises in word by word. Styles that must paint the glyphs
- * themselves (like .text-gradient, which uses background-clip: text) go in
+ * themselves (like .text-highlight, which paints a marker behind each word) go in
  * `wordClassName` -- they don't reach into the per-word inline blocks from
  * the outer span, and the words would render invisible.
  */

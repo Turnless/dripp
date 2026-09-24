@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { motion, useReducedMotion } from "motion/react";
 import { CircleDollarSign, History, Radio, Send, UserRound, type LucideIcon } from "lucide-react";
-import { SendFlow } from "@/components/send/SendFlow";
+import { SendFlow, type SendPrefill } from "@/components/send/SendFlow";
 import { Wordmark } from "@/components/ui/misc";
 import { LiquidBar, useHoverLens } from "@/components/ui/LiquidGlass";
 import { useAccount } from "@/components/account";
@@ -16,7 +16,12 @@ import { formatUsd } from "@/lib/format";
 import { Notice } from "@/components/ui/Notice";
 import { Avatar } from "@/components/ui/Avatar";
 
-const SendContext = createContext<{ openSend: () => void }>({ openSend: () => {} });
+type SendContextValue = {
+  openSend: () => void;
+  /** Opens Send with a recipient already filled in (e.g. "Tip @x again"). */
+  openSendTo: (to: SendPrefill) => void;
+};
+const SendContext = createContext<SendContextValue>({ openSend: () => {}, openSendTo: () => {} });
 export const useSend = () => useContext(SendContext);
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -44,14 +49,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
   const { user } = usePrivy();
   const [sendOpen, setSendOpen] = useState(false);
-  const openSend = useCallback(() => setSendOpen(true), []);
+  const [prefill, setPrefill] = useState<SendPrefill | null>(null);
+  const openSend = useCallback(() => {
+    setPrefill(null);
+    setSendOpen(true);
+  }, []);
+  const openSendTo = useCallback((to: SendPrefill) => {
+    setPrefill(to);
+    setSendOpen(true);
+  }, []);
   const closeSend = useCallback(() => setSendOpen(false), []);
   const nav = navFor(mode);
   const lens = useHoverLens("app-nav");
   const name = user?.google?.name ?? "dripp";
 
   return (
-    <SendContext.Provider value={{ openSend }}>
+    <SendContext.Provider value={{ openSend, openSendTo }}>
       <div className="bg-field min-h-dvh">
         {/* Desktop: floating glass command bar */}
         <header className="fixed inset-x-0 top-4 z-30 hidden justify-center px-6 lg:flex">
@@ -73,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2">
               <button
                 onClick={openSend}
-                className="pressable flex h-10 items-center gap-2 rounded-full bg-primary px-5 text-[0.9375rem] font-semibold text-white shadow-primary hover:bg-primary-hover"
+                className="pressable flex h-10 items-center gap-2 rounded-full bg-primary px-5 text-[0.9375rem] font-semibold text-on-primary shadow-primary hover:bg-primary-hover"
               >
                 <Send className="h-4 w-4" aria-hidden /> Send
               </button>
@@ -119,7 +132,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 aria-label="Send a tip"
                 whileTap={{ scale: 0.92 }}
                 transition={springs.snappy}
-                className="-my-5 grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-primary ring-4 ring-bg"
+                className="-my-5 grid h-14 w-14 place-items-center rounded-full bg-primary text-on-primary shadow-primary ring-4 ring-bg"
               >
                 <Send className="h-6 w-6" strokeWidth={2} aria-hidden />
               </motion.button>
@@ -130,7 +143,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
 
-        <SendFlow open={sendOpen} onClose={closeSend} />
+        <SendFlow open={sendOpen} onClose={closeSend} prefill={prefill} />
         <Notice message={notice} onDismiss={clearNotice} />
       </div>
     </SendContext.Provider>
@@ -159,14 +172,14 @@ function NavPill({
       aria-current={active ? "page" : undefined}
       {...hoverProps}
       className={`relative flex h-9 items-center gap-2 rounded-full px-4 text-[0.9375rem] font-medium transition-colors ${
-        active ? "text-white" : "text-muted hover:text-text"
+        active ? "text-text" : "text-muted hover:text-text"
       }`}
     >
       {lens}
       {active && (
         <motion.span
           layoutId="nav-pill-desktop"
-          className="bg-brand-gradient absolute inset-0 rounded-full shadow-primary"
+          className="absolute inset-0 rounded-full bg-brand shadow-[0_6px_16px_rgba(17,17,17,0.14)]"
           transition={reduce ? { duration: 0 } : springs.snappy}
         />
       )}
@@ -183,13 +196,13 @@ function TabItem({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={`pressable relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full py-2 text-[0.6875rem] font-semibold transition-colors ${
-        active ? "text-emphasis" : "text-muted"
+        active ? "text-text" : "text-muted"
       }`}
     >
       {active && (
         <motion.span
           layoutId="tab-pill"
-          className="absolute inset-0 rounded-full bg-tint"
+          className="absolute inset-0 rounded-full bg-brand"
           transition={reduce ? { duration: 0 } : springs.snappy}
         />
       )}
