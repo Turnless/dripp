@@ -235,13 +235,56 @@ begin
 end;
 $$;
 
+-- Counts one request against each key (e.g. "tip:u:<user id>",
+-- "tip:ip:<address>") in a fixed window of p_window_seconds, and returns
+-- true if every key is still within its limit (p_limits[i] for p_keys[i] --
+-- an IP is shared by everyone behind the same network, so it gets a looser
+-- limit than a user). Keys over the limit still count, so hammering keeps
+-- you limited. Old rows are pruned now and then.
+create or replace function hit_rate_limit(
+  p_keys text[],
+  p_limits integer[],
+  p_window_seconds integer
+)
+returns boolean
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_i integer;
+  v_count integer;
+  v_allowed boolean := true;
+  v_window interval := make_interval(secs => p_window_seconds);
+begin
+  for v_i in 1 .. coalesce(array_length(p_keys, 1), 0) loop
+    insert into rate_limits as r (key, window_start, count)
+      values (p_keys[v_i], now(), 1)
+      on conflict (key) do update
+        set window_start = case when r.window_start <= now() - v_window then now() else r.window_start end,
+            count = case when r.window_start <= now() - v_window then 1 else r.count + 1 end
+      returning r.count into v_count;
+    if v_count > p_limits[v_i] then
+      v_allowed := false;
+    end if;
+  end loop;
+
+  if random() < 0.01 then
+    delete from rate_limits where window_start < now() - interval '1 day';
+  end if;
+
+  return v_allowed;
+end;
+$$;
+
 -- Only the server (service-role key) may call these. Supabase grants new
 -- functions to anon/authenticated by default, and the anon key is public.
 revoke execute on function tx_has_legacy_record(text) from public, anon, authenticated;
 revoke execute on function record_tip(uuid, uuid, text, integer[], bigint) from public, anon, authenticated;
 revoke execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) from public, anon, authenticated;
 revoke execute on function apply_escrow_claim(text, boolean, bigint, integer) from public, anon, authenticated;
+revoke execute on function hit_rate_limit(text[], integer[], integer) from public, anon, authenticated;
 grant execute on function tx_has_legacy_record(text) to service_role;
 grant execute on function record_tip(uuid, uuid, text, integer[], bigint) to service_role;
 grant execute on function record_withdrawal(uuid, numeric, numeric, text, integer[], integer[]) to service_role;
 grant execute on function apply_escrow_claim(text, boolean, bigint, integer) to service_role;
+grant execute on function hit_rate_limit(text[], integer[], integer) to service_role;

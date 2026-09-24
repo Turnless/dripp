@@ -152,6 +152,27 @@ create table escrow_claims (
 
 create index idx_escrow_claims_handle on escrow_claims (platform, platform_username);
 
+-- Cached YouTube/Kick handle lookups, so tipping someone who hasn't joined
+-- doesn't spend platform API quota on every attempt -- and keeps working
+-- (for handles seen before) if the quota runs out. See lib/username-resolve.ts.
+create table handle_lookups (
+  platform text not null check (platform in ('youtube', 'kick')),
+  platform_username text not null check (platform_username = lower(platform_username)),
+  found boolean not null,
+  channel_id text,
+  checked_at timestamptz not null default now(),
+  primary key (platform, platform_username)
+);
+
+-- Per-user / per-IP request counters for API rate limiting (fixed window).
+-- Written only through hit_rate_limit in functions.sql, which also prunes
+-- old rows.
+create table rate_limits (
+  key text primary key,
+  window_start timestamptz not null,
+  count integer not null
+);
+
 -- Progress markers for background jobs (e.g. the last block the reconcile
 -- job has scanned).
 create table sync_state (
@@ -186,3 +207,5 @@ alter table tip_intents enable row level security;
 alter table chain_logs enable row level security;
 alter table escrow_claims enable row level security;
 alter table sync_state enable row level security;
+alter table handle_lookups enable row level security;
+alter table rate_limits enable row level security;

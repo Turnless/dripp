@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveRecipient } from "@/lib/username-resolve";
 import { getAuthenticatedPrivyId } from "@/lib/privy-server";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Lightweight GET used by the frontend to show "this looks like a real
@@ -12,9 +13,12 @@ import { getAuthenticatedPrivyId } from "@/lib/privy-server";
  * status -- never the recipient's user ID or wallet address.
  */
 export async function GET(req: NextRequest) {
-  if (!(await getAuthenticatedPrivyId(req))) {
+  const privyId = await getAuthenticatedPrivyId(req);
+  if (!privyId) {
     return NextResponse.json({ error: "Please sign in again" }, { status: 401 });
   }
+  const limited = await rateLimit(req, "resolve", privyId);
+  if (limited) return limited;
 
   const platform = req.nextUrl.searchParams.get("platform");
   const username = req.nextUrl.searchParams.get("username")?.trim();

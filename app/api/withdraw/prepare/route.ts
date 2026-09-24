@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 import { getAuthenticatedUser } from "@/lib/privy-server";
+import { rateLimit } from "@/lib/rate-limit";
 import { WithdrawSchema, isExternalDestination, planWithdrawal } from "@/lib/withdraw-plan";
 import { centsToUnits } from "@/lib/chain";
 import { getUsdcBalanceUnits } from "@/lib/wallet-server";
@@ -17,6 +18,8 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Please sign in again" }, { status: 401 });
   }
+  const limited = await rateLimit(req, "withdraw", user.id);
+  if (limited) return limited;
 
   const parsed = WithdrawSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
