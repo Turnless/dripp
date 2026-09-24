@@ -12,6 +12,16 @@ import { useAuthedFetch, readError } from "@/lib/hooks";
 import { announceMoneyChanged } from "@/lib/money-client";
 import { formatUsd } from "@/lib/format";
 
+// Messages for `?link_error=` from the platform-link callback route.
+const LINK_ERRORS: Record<string, string> = {
+  cancelled: "Linking was cancelled. You can try again any time.",
+  expired: "That link attempt expired. Please try again.",
+  not_verified: "We couldn't verify your YouTube account. Please try again.",
+  no_channel: "That Google account doesn't have a YouTube channel with a handle. Pick the account that owns your channel.",
+  unavailable: "Linking that platform isn't available yet.",
+  failed: "We couldn't link your channel. Please try again.",
+};
+
 /** Creator mode. design.md section 9, screens 9, 10 and 14. */
 export default function CreatorPage() {
   const { links } = useAccount();
@@ -25,12 +35,15 @@ export default function CreatorPage() {
   const [collectedCents, setCollectedCents] = useState(0);
   useEffect(() => {
     setOrigin(window.location.origin);
-    const collected = Number(new URLSearchParams(window.location.search).get("collected"));
+    const search = new URLSearchParams(window.location.search);
+    const collected = Number(search.get("collected"));
     if (collected > 0) {
       setCollectedCents(collected);
       announceMoneyChanged();
-      window.history.replaceState(null, "", "/creator");
     }
+    const error = search.get("link_error");
+    if (error) setLinkError(LINK_ERRORS[error] ?? LINK_ERRORS.failed);
+    if (collected > 0 || error) window.history.replaceState(null, "", "/creator");
   }, []);
 
   const youtube = links.find((l) => l.platform === "youtube");

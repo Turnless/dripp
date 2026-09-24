@@ -19,22 +19,34 @@ import { claimEscrowFor } from "@/lib/escrow-claims";
  * against current Kick API docs -- the YouTube side uses Google's stable,
  * well-documented OAuth token endpoint and the `channels.list?mine=true` call.
  */
+/**
+ * Why linking failed, sent back to the Creator page as `?link_error=` (which
+ * turns it into a plain-English message) -- this route is opened by the
+ * browser, so it never answers with raw JSON.
+ */
+type LinkError = "cancelled" | "expired" | "not_verified" | "no_channel" | "unavailable" | "failed";
+
+function linkFailed(reason: LinkError) {
+  const res = NextResponse.redirect(`${process.env.APP_BASE_URL}/creator?link_error=${reason}`);
+  res.cookies.delete({ name: LINK_NONCE_COOKIE, path: "/api/platform/callback" });
+  return res;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { provider: string } }
 ) {
+  // The provider sends `error` (e.g. access_denied) when the user cancels.
+  if (req.nextUrl.searchParams.get("error")) return linkFailed("cancelled");
+
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
-  if (!code || !state) {
-    return NextResponse.json({ error: "Missing code/state" }, { status: 400 });
-  }
+  if (!code || !state) return linkFailed("failed");
 
   // The nonce cookie proves this callback is finishing a flow that THIS
   // browser started -- see the comment at the top of lib/oauth.ts.
   const verified = verifyState(state, req.cookies.get(LINK_NONCE_COOKIE)?.value);
-  if (!verified) {
-    return NextResponse.json({ error: "Invalid or expired state" }, { status: 400 });
-  }
+  if (!verified) return linkFailed("expired");
 
   const redirectUri = `${process.env.APP_BASE_URL}/api/platform/callback/${params.provider}`;
   let platformUsername: string;
@@ -55,10 +67,7 @@ export async function GET(
     if (!tokenRes.ok) {
       // Don't echo the provider's raw error body back to the browser.
       console.error("YouTube token exchange failed", tokenJson);
-      return NextResponse.json(
-        { error: "Could not verify your YouTube account" },
-        { status: 400 }
-      );
+      return linkFailed("not_verified");
     }
 
     const meRes = await fetch(
@@ -67,22 +76,14 @@ export async function GET(
     );
     const meJson = await meRes.json();
     const handle = meJson.items?.[0]?.snippet?.customUrl as string | undefined;
-    if (!handle) {
-      return NextResponse.json(
-        { error: "Could not resolve YouTube handle for this account" },
-        { status: 400 }
-      );
-    }
+    if (!handle) return linkFailed("no_channel");
     platformUsername = normalizeHandle(handle);
   } else if (params.provider === "kick") {
     // TODO: implement Kick's token exchange + "me" endpoint the same way,
     // once confirmed against current Kick API docs.
-    return NextResponse.json(
-      { error: "Kick linking not yet implemented in this scaffold" },
-      { status: 501 }
-    );
+    return linkFailed("unavailable");
   } else {
-    return NextResponse.json({ error: "Unknown provider" }, { status: 400 });
+    return linkFailed("unavailable");
   }
 
   const db = supabaseServer();
@@ -100,7 +101,7 @@ export async function GET(
   );
   if (linkErr) {
     console.error("platform_links upsert failed", linkErr);
-    return NextResponse.json({ error: "Could not link account" }, { status: 500 });
+    return linkFailed("failed");
   }
 
   // Release any tips held in escrow for this handle, now that OAuth proved

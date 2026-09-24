@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LINK_NONCE_COOKIE, signState } from "@/lib/oauth";
 import { getAuthenticatedUser } from "@/lib/privy-server";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Step 1 of platform linking: build the platform's own OAuth consent URL for
@@ -24,6 +25,8 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Please sign in again" }, { status: 401 });
   }
+  const limited = await rateLimit(req, "platformLink", user.id);
+  if (limited) return limited;
 
   const redirectUri = `${process.env.APP_BASE_URL}/api/platform/callback/${params.provider}`;
   let url: URL;
@@ -37,8 +40,10 @@ export async function POST(
       "scope",
       "https://www.googleapis.com/auth/youtube.readonly"
     );
-    url.searchParams.set("access_type", "offline");
-    url.searchParams.set("prompt", "consent");
+    // Only the one-time "which channel is mine" read is needed, so no refresh
+    // token (no access_type=offline). select_account lets a user with several
+    // Google accounts pick the one that owns their channel.
+    url.searchParams.set("prompt", "select_account");
   } else if (params.provider === "kick") {
     // TODO: confirm this authorize URL and scope name against current Kick docs.
     url = new URL("https://id.kick.com/oauth/authorize");
