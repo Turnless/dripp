@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Sheet } from "@/components/ui/Sheet";
 import { Stagger, StaggerItem } from "@/components/motion";
+import { WITHDRAWAL_FEE_PERCENT } from "@/lib/fees";
 
 /** Profile + settings. */
 export default function ProfilePage() {
@@ -30,15 +31,15 @@ export default function ProfilePage() {
 
       <StaggerItem>
         <GlassCard className="flex items-center gap-4 p-5">
-          <Avatar src={avatarUrl} name={name} className="h-14 w-14 text-title-2 shadow-primary" />
+          <Avatar src={avatarUrl} name={name} className="h-16 w-16 text-title-1" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-title-2">{name}</p>
+            <p className="truncate text-title-2 !font-extrabold">{name}</p>
             {email && <p className="truncate text-caption text-muted">{email}</p>}
+            {/* Chosen once at sign-up; it can't be changed. */}
+            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-caption font-bold text-on-primary">
+              <ModeIcon className="h-3.5 w-3.5" aria-hidden /> {creator ? "Creator" : "Viewer"}
+            </span>
           </div>
-          {/* Chosen once at sign-up; it can't be changed. */}
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-tint px-3 py-1.5 text-caption font-semibold text-emphasis">
-            <ModeIcon className="h-4 w-4" aria-hidden /> {creator ? "Creator" : "Viewer"}
-          </span>
         </GlassCard>
       </StaggerItem>
 
@@ -53,7 +54,22 @@ export default function ProfilePage() {
       )}
 
       <StaggerItem>
-        <Button variant="ghost" onClick={() => setConfirmSignOut(true)}>
+        <GlassCard className="overflow-hidden">
+          <dl className="divide-y divide-deep/5">
+            <div className="flex items-center justify-between gap-4 px-5 py-4">
+              <dt className="font-bold">Sending a tip</dt>
+              <dd className="text-muted">Free</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 px-5 py-4">
+              <dt className="font-bold">Withdrawing</dt>
+              <dd className="text-muted">{WITHDRAWAL_FEE_PERCENT} fee</dd>
+            </div>
+          </dl>
+        </GlassCard>
+      </StaggerItem>
+
+      <StaggerItem className="flex justify-center">
+        <Button variant="ghost" onClick={() => setConfirmSignOut(true)} className="font-extrabold !text-negative">
           <LogOut className="h-5 w-5" aria-hidden /> Sign out
         </Button>
       </StaggerItem>

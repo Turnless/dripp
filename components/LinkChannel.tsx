@@ -74,7 +74,16 @@ function CollectedBanner({ cents }: { cents: number }) {
  * The linked channel (picture, handle, verified), or the button to link one,
  * plus the result of a link that just finished.
  */
-export function ChannelCard({ page, blurb }: { page: LinkPage; blurb: string }) {
+export function ChannelCard({
+  page,
+  blurb,
+  footer,
+}: {
+  page: LinkPage;
+  blurb: string;
+  /** Shown under a linked channel (e.g. the creator's week). */
+  footer?: React.ReactNode;
+}) {
   const { links } = useAccount();
   const authedFetch = useAuthedFetch();
   const [linking, setLinking] = useState(false);
@@ -115,12 +124,13 @@ export function ChannelCard({ page, blurb }: { page: LinkPage; blurb: string }) 
               <p className="text-caption text-muted">Verified YouTube channel</p>
             </div>
             {!youtube.needs_relink && (
-              <Button variant="secondary" onClick={linkYoutube} loading={linking}>
+              <Button variant="outline" onClick={linkYoutube} loading={linking} className="!h-10 !px-4">
                 Relink
               </Button>
             )}
           </div>
         ) : null}
+        {youtube && !youtube.needs_relink && footer}
         {youtube?.needs_relink && (
           <div className="flex flex-col gap-3">
             <p className="text-muted">

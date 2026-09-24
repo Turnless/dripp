@@ -63,6 +63,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Text fields show focus through their own rounded border (or the caret),
+   so skip the square outline around the bare input. */
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
 @layer components {
   /* Soft static field behind the glass (design.md 4.2). Never animated. */
   .bg-field {

@@ -15,7 +15,8 @@ export type ActivityItem = {
 
 const toCents = (amount: string | number) => Math.round(Number(amount) * 100);
 
-export type WeekSummary = { cents: number; count: number };
+/** Tips received in the last 7 days, and how many different people sent them. */
+export type WeekSummary = { cents: number; count: number; supporters: number };
 
 /**
  * The signed-in user's history: direct tips (sent + received), escrowed tips
@@ -127,9 +128,13 @@ async function weekReceived(userId: string): Promise<WeekSummary> {
   const db = supabaseServer();
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const [direct, collected] = await Promise.all([
-    db.from("tips").select("amount").eq("recipient_id", userId).gte("created_at", since),
-    db.from("pending_tips").select("amount").eq("claimed_by", userId).gte("claimed_at", since),
+    db.from("tips").select("amount, sender_id").eq("recipient_id", userId).gte("created_at", since),
+    db.from("pending_tips").select("amount, sender_id").eq("claimed_by", userId).gte("claimed_at", since),
   ]);
   const rows = [...(direct.data ?? []), ...(collected.data ?? [])];
-  return { cents: rows.reduce((sum, r) => sum + toCents(r.amount), 0), count: rows.length };
+  return {
+    cents: rows.reduce((sum, r) => sum + toCents(r.amount), 0),
+    count: rows.length,
+    supporters: new Set(rows.map((r) => r.sender_id)).size,
+  };
 }

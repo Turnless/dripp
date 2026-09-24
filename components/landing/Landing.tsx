@@ -16,7 +16,12 @@ import {
   ArrowUpRight,
   AtSign,
   BadgeCheck,
+  CircleHelp,
+  Droplet,
+  ListOrdered,
   Plus,
+  Receipt,
+  Sparkles,
   CreditCard,
   Hourglass,
   MonitorPlay,
@@ -170,6 +175,7 @@ export function Landing() {
   return (
     <div className="bg-field min-h-dvh overflow-x-clip">
       <LandingNav onLogin={login} />
+      <MobileLandingNav onLogin={login} />
 
       <main>
         {/* Hero */}
@@ -453,7 +459,7 @@ function LandingNav({ onLogin }: { onLogin: () => void }) {
       initial={{ y: -24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={springs.default}
-      className="fixed inset-x-0 top-4 z-40 flex justify-center px-4"
+      className="fixed inset-x-0 top-4 z-40 hidden justify-center px-4 md:flex"
     >
       <LiquidBar
         className={`flex w-full items-center justify-between rounded-full py-2 pl-5 pr-2 transition-[max-width,box-shadow] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
@@ -489,6 +495,192 @@ function LandingNav({ onLogin }: { onLogin: () => void }) {
         </div>
       </LiquidBar>
     </motion.header>
+  );
+}
+
+// Sections the mobile nav circle can show while scrolling (top = the hero).
+const MOBILE_SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
+  { id: "top", label: "dripp", icon: Droplet },
+  { id: "features", label: "Features", icon: Sparkles },
+  { id: "how", label: "How it works", icon: ListOrdered },
+  { id: "creators", label: "Who it's for", icon: Users },
+  { id: "why", label: "Why dripp", icon: Zap },
+  { id: "fees", label: "Fees", icon: Receipt },
+  { id: "faq", label: "FAQ", icon: CircleHelp },
+];
+
+/**
+ * Mobile landing nav. At the top of the page it's the full bar; once you
+ * scroll it shrinks into a glass circle that shows the section you're in,
+ * with a ring for how far down the page you are. Tapping the circle opens
+ * the full nav; choosing a link (or tapping outside) folds it back.
+ */
+function MobileLandingNav({ onLogin }: { onLogin: () => void }) {
+  const reduce = useReducedMotion();
+  const [scrolled, setScrolled] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState("top");
+  const { scrollYProgress } = useScroll();
+  const progress = useSpring(scrollYProgress, { stiffness: 200, damping: 30, restDelta: 0.001 });
+
+  useEffect(() => {
+    const onScroll = () => {
+      setScrolled(window.scrollY > 80);
+      const line = window.innerHeight * 0.4;
+      let current = "top";
+      for (const s of MOBILE_SECTIONS.slice(1)) {
+        const el = document.getElementById(s.id);
+        if (el && el.getBoundingClientRect().top <= line) current = s.id;
+      }
+      setActive(current);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const section = MOBILE_SECTIONS.find((s) => s.id === active) ?? MOBILE_SECTIONS[0];
+  const shape = open ? "panel" : scrolled ? "circle" : "bar";
+  const morph = reduce ? { duration: 0 } : { type: "spring", bounce: 0.18, duration: 0.5 } as const;
+  const fade = reduce
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    : {
+        initial: { opacity: 0, scale: 0.9, filter: "blur(4px)" },
+        animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
+        exit: { opacity: 0, scale: 0.9, filter: "blur(4px)" },
+      };
+
+  return (
+    <>
+      <AnimatePresence>
+        {open && (
+          <motion.button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-30 cursor-default md:hidden"
+            style={{ background: "var(--scrim)" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.header
+        initial={{ y: -24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={springs.default}
+        className="fixed inset-x-0 top-4 z-40 flex justify-center px-4 md:hidden"
+      >
+        <motion.div
+          layout
+          transition={morph}
+          style={{ borderRadius: 28 }}
+          className={`liquid-glass overflow-hidden ${
+            shape === "circle" ? "h-14 w-14" : shape === "bar" ? "w-full max-w-5xl" : "w-full"
+          }`}
+        >
+          <AnimatePresence mode="popLayout" initial={false}>
+            {shape === "bar" && (
+              <motion.div key="bar" {...fade} className="flex items-center justify-between py-2 pl-4 pr-2">
+                <Wordmark />
+                <Button onClick={onLogin} className="!h-10">
+                  Get started
+                </Button>
+              </motion.div>
+            )}
+
+            {shape === "circle" && (
+              <motion.button
+                key="circle"
+                {...fade}
+                type="button"
+                onClick={() => setOpen(true)}
+                aria-label={`Open menu. You're at: ${section.label}`}
+                aria-expanded={false}
+                className="relative grid h-14 w-14 place-items-center"
+              >
+                {/* How far down the page you are */}
+                <svg viewBox="0 0 56 56" className="absolute inset-0 -rotate-90" aria-hidden>
+                  <circle cx="28" cy="28" r="25" fill="none" stroke="rgb(var(--text) / 0.08)" strokeWidth="3" />
+                  <motion.circle
+                    cx="28"
+                    cy="28"
+                    r="25"
+                    fill="none"
+                    stroke="rgb(var(--text))"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    style={{ pathLength: progress }}
+                  />
+                </svg>
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span
+                    key={section.id}
+                    initial={reduce ? { opacity: 0 } : { y: 14, opacity: 0, scale: 0.6 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    exit={reduce ? { opacity: 0 } : { y: -14, opacity: 0, scale: 0.6 }}
+                    transition={reduce ? { duration: 0.1 } : springs.snappy}
+                    className="grid h-9 w-9 place-items-center rounded-full bg-brand text-text"
+                  >
+                    <section.icon className="h-[18px] w-[18px]" strokeWidth={2.2} aria-hidden />
+                  </motion.span>
+                </AnimatePresence>
+              </motion.button>
+            )}
+
+            {shape === "panel" && (
+              <motion.nav key="panel" {...fade} aria-label="Sections" className="flex flex-col gap-1 p-2">
+                <div className="flex items-center justify-between py-1 pl-2">
+                  <Wordmark />
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    aria-label="Close menu"
+                    className="pressable grid h-10 w-10 place-items-center rounded-full bg-text/[0.06]"
+                  >
+                    <X className="h-5 w-5" aria-hidden />
+                  </button>
+                </div>
+                {MOBILE_SECTIONS.slice(1).map((s, i) => (
+                  <motion.button
+                    key={s.id}
+                    type="button"
+                    initial={reduce ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={reduce ? { duration: 0 } : { ...springs.default, delay: 0.04 * i }}
+                    onClick={() => {
+                      setOpen(false);
+                      scrollTo(s.id);
+                    }}
+                    className={`pressable flex h-12 items-center gap-3 rounded-2xl px-3 text-left font-semibold ${
+                      active === s.id ? "bg-brand text-text" : "text-text hover:bg-text/[0.05]"
+                    }`}
+                  >
+                    <s.icon className="h-5 w-5" strokeWidth={2} aria-hidden />
+                    {s.label}
+                  </motion.button>
+                ))}
+                <div className="mt-1 grid grid-cols-2 gap-2 p-1">
+                  <Button variant="outline" onClick={onLogin}>
+                    Sign in
+                  </Button>
+                  <Button onClick={onLogin}>Get started</Button>
+                </div>
+              </motion.nav>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </motion.header>
+    </>
   );
 }
 
