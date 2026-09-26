@@ -1,4 +1,8 @@
+"use client";
+
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowDownToLine, Plus } from "lucide-react";
+import { springs } from "@/components/motion";
 import { formatUsd } from "@/lib/format";
 import type { ActivityItem } from "@/lib/money-client";
 
@@ -16,6 +20,7 @@ function relativeTime(iso: string): string {
 
 /** One history entry. Shows handles and dollars only -- never addresses or hashes. */
 export function ActivityRow({ item }: { item: ActivityItem }) {
+  const reduce = useReducedMotion();
   const withdrawal = item.direction === "withdrawn";
   const added = item.direction === "added";
   const incoming = item.direction === "received" || added;
@@ -64,19 +69,31 @@ export function ActivityRow({ item }: { item: ActivityItem }) {
         <p className="truncate font-bold">{title}</p>
         <p className="truncate text-caption text-muted">{detail}</p>
       </div>
-      {waiting ? (
-        <span className="shrink-0 rounded-full bg-tint px-2.5 py-1 text-caption font-bold text-on-brand">Waiting</span>
-      ) : returned ? (
-        // A returned tip left and came back: the balance is unchanged.
-        <span className="shrink-0 rounded-full bg-text/[0.07] px-2.5 py-1 text-caption font-bold text-muted">
-          Returned
-        </span>
-      ) : (
-        <p className={`num shrink-0 font-extrabold ${incoming ? "text-positive" : ""}`}>
-          {incoming ? "+" : "−"}
-          {formatUsd(item.cents)}
-        </p>
-      )}
+      {/* A status change (e.g. Waiting -> collected) swaps the badge with a small flip */}
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={waiting ? "waiting" : returned ? "returned" : "amount"}
+          className="shrink-0"
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -10, scale: 0.9 }}
+          transition={springs.snappy}
+        >
+          {waiting ? (
+            <span className="block rounded-full bg-tint px-2.5 py-1 text-caption font-bold text-on-brand">Waiting</span>
+          ) : returned ? (
+            // A returned tip left and came back: the balance is unchanged.
+            <span className="block rounded-full bg-text/[0.07] px-2.5 py-1 text-caption font-bold text-muted">
+              Returned
+            </span>
+          ) : (
+            <span className={`num block font-extrabold ${incoming ? "text-positive" : ""}`}>
+              {incoming ? "+" : "−"}
+              {formatUsd(item.cents)}
+            </span>
+          )}
+        </motion.span>
+      </AnimatePresence>
     </div>
   );
 }

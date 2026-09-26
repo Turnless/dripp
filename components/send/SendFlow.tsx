@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AlertCircle, ArrowLeft, Check, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { AnimatePresence, motion, useAnimate, useReducedMotion } from "motion/react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthedFetch } from "@/lib/hooks";
+import { DropCheck } from "@/components/motion";
 import { useSendTip } from "@/lib/money-client";
 import { formatUsd, parseUsdToCents } from "@/lib/format";
 import { MAX_TIP_CENTS } from "@/lib/fees";
@@ -315,6 +316,14 @@ function AmountStep({
   onBack: () => void;
   onNext: () => void;
 }) {
+  // A small tick on the amount each time it changes.
+  const reduce = useReducedMotion();
+  const [tickRef, animateTick] = useAnimate<HTMLInputElement>();
+  useEffect(() => {
+    if (reduce || !tickRef.current) return;
+    animateTick(tickRef.current, { scale: [1.06, 1] }, { type: "spring", bounce: 0, duration: 0.25 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amountText]);
   const tooBig = cents !== null && cents > MAX_TIP_CENTS;
   const valid = cents !== null && cents >= 1 && !tooBig;
 
@@ -334,6 +343,7 @@ function AmountStep({
           $
         </span>
         <input
+          ref={tickRef}
           value={amountText}
           onChange={(e) => {
             const v = e.target.value.replace(/[^\d.]/g, "");
@@ -508,18 +518,7 @@ function SentStep({
 
   return (
     <div className="flex flex-col items-center gap-3 rounded-card bg-brand px-6 pb-6 pt-8 text-center text-text">
-      <motion.span
-        initial={reduce ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={reduce ? { duration: 0.15 } : { type: "spring", bounce: 0.3, duration: 0.45 }}
-        className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-on-primary"
-      >
-        {pending ? (
-          <Clock className="h-8 w-8" strokeWidth={2.4} aria-hidden />
-        ) : (
-          <Check className="h-9 w-9" strokeWidth={3} aria-hidden />
-        )}
-      </motion.span>
+      <DropCheck pending={pending} />
       <p className="num mt-3 text-[3.25rem] font-extrabold leading-none tracking-[-0.05em]">{formatUsd(cents)}</p>
       <div role="status">
         <p className="font-semibold text-on-brand">

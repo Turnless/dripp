@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { Avatar } from "@/components/ui/Avatar";
 import Link from "next/link";
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowDownToLine, ArrowRight, History, Plus, Send, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 import { useSend } from "@/components/AppShell";
 import { useAccount } from "@/components/account";
@@ -17,7 +17,7 @@ import { ActivityRow } from "@/components/ActivityRow";
 import { useVerifyPhone } from "@/components/VerificationCard";
 import type { ActivityItem, WeekSummary } from "@/app/api/activity/route";
 import { useBalance, useRecentWithWeek } from "@/lib/money-client";
-import { CountUp, Stagger, StaggerItem, springs } from "@/components/motion";
+import { RollingNumber, Stagger, StaggerItem, springs } from "@/components/motion";
 import { formatUsd } from "@/lib/format";
 
 /** Money (home). design.md section 9, screen 3. */
@@ -28,6 +28,7 @@ export default function MoneyPage() {
   const reduce = useReducedMotion();
 
   const balance = useBalance();
+  const arrived = useArrivedCents(balance.data);
   // Phones and small laptops show the latest 5; wide screens have room for 8.
   const recent = useRecentWithWeek(8);
   const { user } = usePrivy();
@@ -50,6 +51,23 @@ export default function MoneyPage() {
       <div className="flex flex-col gap-6">
       <StaggerItem>
         <div className="relative overflow-hidden rounded-card bg-brand px-6 pb-6 pt-10 text-center shadow-[0_18px_40px_-18px_rgba(17,17,17,0.35)] lg:flex lg:items-center lg:justify-between lg:gap-8 lg:p-8 lg:text-left">
+          {/* Money just came in: a chip floats up by the balance */}
+          <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center lg:left-8 lg:right-auto lg:top-5 lg:justify-start" aria-live="polite">
+            <AnimatePresence>
+              {arrived && (
+                <motion.span
+                  key={arrived.id}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.8 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={reduce ? { opacity: 0 } : { opacity: 0, y: -14 }}
+                  transition={springs.soft}
+                  className="num rounded-full bg-primary px-3 py-1 text-caption font-extrabold text-on-primary"
+                >
+                  +{formatUsd(arrived.cents)}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
           <div>
           <p className="relative text-caption text-on-brand">Available</p>
           <p className="relative mt-2 text-money">
@@ -60,7 +78,7 @@ export default function MoneyPage() {
                 <Skeleton className="mx-auto h-[0.9em] w-48 rounded-2xl bg-text/10 lg:mx-0" />
               )
             ) : (
-              <CountUp key={balance.data} value={balance.data} format={(v) => formatUsd(Math.round(v))} />
+              <RollingNumber value={balance.data} format={(v) => formatUsd(Math.round(v))} />
             )}
           </p>
           {balance.error && (
@@ -126,7 +144,7 @@ export default function MoneyPage() {
           ) : (
             <Stagger as="ul" className="divide-y divide-deep/5">
               {activity.data.map((item, i) => (
-                <StaggerItem as="li" key={item.id} className={i >= 5 ? "hidden xl:block" : undefined}>
+                <StaggerItem as="li" layout key={item.id} className={i >= 5 ? "hidden xl:block" : undefined}>
                   <ActivityRow item={item} />
                 </StaggerItem>
               ))}
@@ -226,6 +244,23 @@ function TipAgainCard({ items }: { items: ActivityItem[] | null }) {
       )}
     </GlassCard>
   );
+}
+
+/** When the balance goes up after the first load, how much came in (shown for a moment). */
+function useArrivedCents(cents: number | null) {
+  const prev = useRef<number | null>(null);
+  const [arrived, setArrived] = useState<{ id: number; cents: number } | null>(null);
+  useEffect(() => {
+    if (cents === null) return;
+    if (prev.current !== null && cents > prev.current) setArrived({ id: Date.now(), cents: cents - prev.current });
+    prev.current = cents;
+  }, [cents]);
+  useEffect(() => {
+    if (!arrived) return;
+    const t = setTimeout(() => setArrived(null), 2400);
+    return () => clearTimeout(t);
+  }, [arrived]);
+  return arrived;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

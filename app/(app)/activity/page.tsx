@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { History } from "lucide-react";
 import { useSend } from "@/components/AppShell";
 import { ActivityRow } from "@/components/ActivityRow";
@@ -111,11 +111,21 @@ export default function ActivityPage() {
               <h2 className="px-1 text-label uppercase text-muted">{g.label}</h2>
               <GlassCard className="overflow-hidden">
                 <ul className="divide-y divide-deep/5">
-                  {g.items.map((item) => (
-                    <li key={item.id}>
-                      <ActivityRow item={item} />
-                    </li>
-                  ))}
+                  <AnimatePresence initial={false}>
+                    {g.items.map((item) => (
+                      // New entries slide in; the rest glide down to make room.
+                      <motion.li
+                        key={item.id}
+                        layout={reduce ? false : "position"}
+                        initial={reduce ? { opacity: 0 } : { opacity: 0, y: -12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={springs.default}
+                      >
+                        <ActivityRow item={item} />
+                      </motion.li>
+                    ))}
+                  </AnimatePresence>
                 </ul>
               </GlassCard>
             </StaggerItem>

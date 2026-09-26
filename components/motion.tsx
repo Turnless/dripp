@@ -84,15 +84,23 @@ export function StaggerItem({
   children,
   className,
   as = "div",
+  layout = false,
 }: {
   children: React.ReactNode;
   className?: string;
   as?: "div" | "li" | "article";
+  /** Glide to a new position when items are added above (e.g. a new tip arrives). */
+  layout?: boolean;
 }) {
   const reduce = useReducedMotion();
   const Tag = motion[as];
   return (
-    <Tag className={className} variants={reduce ? staggerChildReduced : staggerChild}>
+    <Tag
+      className={className}
+      variants={reduce ? staggerChildReduced : staggerChild}
+      layout={layout && !reduce ? "position" : undefined}
+      transition={layout ? springs.default : undefined}
+    >
       {children}
     </Tag>
   );
@@ -169,5 +177,116 @@ export function WordsIn({
         </span>
       ))}
     </span>
+  );
+}
+
+/**
+ * A number that rolls from its previous value to the new one (the first
+ * value counts up from 0). Unlike CountUp, a refresh never restarts at 0.
+ */
+export function RollingNumber({
+  value,
+  format = (v) => Math.round(v).toString(),
+  duration = 0.9,
+  className,
+}: {
+  value: number;
+  format?: (v: number) => string;
+  duration?: number;
+  className?: string;
+}) {
+  const reduce = useReducedMotion();
+  const shown = useRef(0);
+  const [text, setText] = useState(format(reduce ? value : 0));
+
+  useEffect(() => {
+    if (reduce) {
+      shown.current = value;
+      return setText(format(value));
+    }
+    const controls = animate(shown.current, value, {
+      duration,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: (v) => {
+        shown.current = v;
+        setText(format(v));
+      },
+    });
+    return () => controls.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, reduce, duration]);
+
+  return <span className={`num ${className ?? ""}`}>{text}</span>;
+}
+
+/**
+ * The "sent" mark: a yellow drop falls into the circle, splashes into two
+ * rings, and the check draws itself. `pending` shows a clock instead.
+ */
+export function DropCheck({ pending = false }: { pending?: boolean }) {
+  const reduce = useReducedMotion();
+  if (reduce) {
+    return (
+      <span className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-on-primary">
+        <CheckOrClock pending={pending} draw={false} />
+      </span>
+    );
+  }
+  return (
+    <span className="relative grid h-[72px] w-[72px] place-items-center">
+      {/* the drop */}
+      <motion.svg
+        viewBox="0 0 24 30"
+        className="absolute left-1/2 top-1/2 h-9 w-7 -translate-x-1/2 -translate-y-1/2 text-primary"
+        initial={{ y: -90, opacity: 1, scale: 1 }}
+        animate={{ y: 0, opacity: 0, scale: 0.6 }}
+        transition={{ y: { duration: 0.32, ease: [0.55, 0, 1, 0.45] }, opacity: { delay: 0.3, duration: 0.05 }, scale: { delay: 0.28, duration: 0.1 } }}
+        aria-hidden
+      >
+        <path d="M12 29a9 9 0 0 0 9-9c0-2.6-1.3-5-3.9-7.1S12.5 7.8 12 1c-.6 6.8-3 9.8-5.1 11.9S3 17.4 3 20a9 9 0 0 0 9 9z" fill="currentColor" />
+      </motion.svg>
+      {/* splash rings */}
+      {[0, 0.08].map((d) => (
+        <motion.span
+          key={d}
+          className="absolute inset-0 rounded-full ring-2 ring-primary"
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: [0.5, 0.5, 1.9], opacity: [0, 0.7, 0] }}
+          transition={{ delay: 0.3 + d, duration: 0.6, times: [0, 0.02, 1], ease: "easeOut" }}
+          aria-hidden
+        />
+      ))}
+      <motion.span
+        className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-on-primary"
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ delay: 0.3, type: "spring", bounce: 0.45, duration: 0.5 }}
+      >
+        <CheckOrClock pending={pending} draw />
+      </motion.span>
+    </span>
+  );
+}
+
+function CheckOrClock({ pending, draw }: { pending: boolean; draw: boolean }) {
+  const path = (d: string, delay: number) => (
+    <motion.path
+      d={d}
+      initial={draw ? { pathLength: 0 } : false}
+      animate={{ pathLength: 1 }}
+      transition={{ delay, duration: 0.35, ease: "easeOut" }}
+    />
+  );
+  return (
+    <svg viewBox="0 0 24 24" className={pending ? "h-8 w-8" : "h-9 w-9"} fill="none" stroke="currentColor" strokeWidth={pending ? 2.4 : 3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {pending ? (
+        <>
+          <circle cx="12" cy="12" r="10" />
+          {path("M12 6v6l4 2", 0.55)}
+        </>
+      ) : (
+        path("M20 6 9 17l-5-5", 0.5)
+      )}
+    </svg>
   );
 }
