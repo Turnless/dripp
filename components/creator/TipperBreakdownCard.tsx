@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { AlertTriangle, CheckCircle2, Clock, type LucideIcon } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Skeleton } from "@/components/ui/misc";
+import { RollingNumber, Swap } from "@/components/motion";
 import { useAuthedFetch, readError } from "@/lib/hooks";
 import type { TipperBreakdown } from "@/app/api/creator/tippers/route";
 
@@ -103,7 +104,7 @@ export function TipperBreakdownCard() {
         <>
           <p className="text-muted">
             <span className="num text-[2rem] font-extrabold leading-none tracking-[-0.045em] text-text">
-              {pct(data.real, data.total)}%
+              <RollingNumber value={pct(data.real, data.total)} format={(v) => `${Math.round(v)}%`} />
             </span>{" "}
             are verified people
           </p>
@@ -130,9 +131,11 @@ export function TipperBreakdownCard() {
             ))}
           </div>
           <p className="min-h-5 text-caption text-muted" aria-live="polite">
-            {focus
-              ? `${focus.label}: ${data[focus.key]} ${data[focus.key] === 1 ? "person" : "people"} (${pct(data[focus.key], data.total)}%)`
-              : "Tap or hover the bar for details."}
+            <Swap id={focus ? focus.key : "none"}>
+              {focus
+                ? `${focus.label}: ${data[focus.key]} ${data[focus.key] === 1 ? "person" : "people"} (${pct(data[focus.key], data.total)}%)`
+                : "Tap or hover the bar for details."}
+            </Swap>
           </p>
 
           {/* Legend doubles as the table view: every number is written out. */}

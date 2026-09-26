@@ -10,7 +10,7 @@ import { BulkSendSheet } from "@/components/send/BulkSendSheet";
 import { TipperBreakdownCard } from "@/components/creator/TipperBreakdownCard";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { Stagger, StaggerItem, springs } from "@/components/motion";
+import { RollingNumber, Stagger, StaggerItem, springs } from "@/components/motion";
 import { useRecentWithWeek } from "@/lib/money-client";
 import { formatUsd } from "@/lib/format";
 import { useAuthedFetch } from "@/lib/hooks";
@@ -78,12 +78,13 @@ export default function CreatorPage() {
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <Stat
-                  value={subscribers === null ? "—" : compact.format(subscribers)}
+                  value={subscribers}
+                  format={(v) => compact.format(Math.round(v))}
                   label="Subscribers"
                   live={subscribers !== null}
                 />
-                <Stat value={week ? formatUsd(week.cents) : "—"} label="Tips this week" />
-                <Stat value={week ? String(week.supporters) : "—"} label="Supporters this week" />
+                <Stat value={week ? week.cents : null} format={(v) => formatUsd(Math.round(v))} label="Tips this week" />
+                <Stat value={week ? week.supporters : null} label="Supporters this week" />
               </div>
               {username && (
                 <Link
@@ -171,10 +172,22 @@ export default function CreatorPage() {
   );
 }
 
-function Stat({ value, label, live }: { value: string; label: string; live?: boolean }) {
+function Stat({
+  value,
+  format = (v) => String(Math.round(v)),
+  label,
+  live,
+}: {
+  value: number | null;
+  format?: (v: number) => string;
+  label: string;
+  live?: boolean;
+}) {
   return (
     <div className="min-w-0 rounded-chip bg-text/[0.05] p-3">
-      <p className="num truncate text-[1.375rem] font-extrabold leading-none tracking-[-0.045em]">{value}</p>
+      <p className="num truncate text-[1.375rem] font-extrabold leading-none tracking-[-0.045em]">
+        {value === null ? "—" : <RollingNumber value={value} format={format} />}
+      </p>
       <p className="mt-1.5 flex items-center gap-1.5 text-caption leading-tight text-muted">
         {live && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-positive" aria-hidden />}
         {label}

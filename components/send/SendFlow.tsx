@@ -7,7 +7,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthedFetch } from "@/lib/hooks";
-import { DropCheck } from "@/components/motion";
+import { DropCheck, Swap, ErrorText, stepVariants, stepVariantsReduced, useStepDirection } from "@/components/motion";
 import { useSendTip } from "@/lib/money-client";
 import { formatUsd, parseUsdToCents } from "@/lib/format";
 import { MAX_TIP_CENTS } from "@/lib/fees";
@@ -58,13 +58,15 @@ export function SendFlow({
   const cleanHandle = handle.trim().replace(/^@/, "");
   const cents = parseUsdToCents(amountText);
 
+  const dir = useStepDirection(["who", "amount", "review", "sent"].indexOf(step));
+
   const title =
     step === "who" ? "Send a tip" : step === "amount" ? "How much?" : step === "review" ? "Review" : "Sent";
 
   return (
     <Sheet open={open} onClose={onClose} title={title}>
-      <AnimatePresence mode="wait" initial={false}>
-        <StepPane key={step}>
+      <AnimatePresence mode="wait" initial={false} custom={dir}>
+        <StepPane key={step} dir={dir}>
           {step === "who" && (
             <WhoStep
               platform={platform}
@@ -130,13 +132,16 @@ export function SendFlow({
   );
 }
 
-function StepPane({ children }: { children: React.ReactNode }) {
+/** Forward steps come in from the right, going back comes in from the left. */
+function StepPane({ children, dir }: { children: React.ReactNode; dir: number }) {
   const reduce = useReducedMotion();
   return (
     <motion.div
-      initial={reduce ? { opacity: 0 } : { opacity: 0, x: 24 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={reduce ? { opacity: 0 } : { opacity: 0, x: -24 }}
+      custom={dir}
+      variants={reduce ? stepVariantsReduced : stepVariants}
+      initial="enter"
+      animate="center"
+      exit="exit"
       transition={reduce ? { duration: 0.12 } : stepTransition}
       className="pt-2"
     >
@@ -245,7 +250,9 @@ function WhoStep({
         </div>
       </label>
 
-      <LookupStatus lookup={lookup} handle={cleanHandle} platformName={platformName} />
+      <Swap id={lookup}>
+        <LookupStatus lookup={lookup} handle={cleanHandle} platformName={platformName} />
+      </Swap>
 
       <Button type="submit" size="lg" fullWidth disabled={!canContinue}>
         Continue
@@ -467,11 +474,11 @@ function ReviewStep({
         </p>
       )}
 
-      {error && (
-        <p className="flex items-start gap-2 text-caption text-negative" role="alert">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {error}
-        </p>
-      )}
+      <ErrorText
+        message={error}
+        className="flex items-start gap-2 text-caption text-negative"
+        icon={<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}
+      />
 
       <div className="flex gap-3">
         <Button type="button" variant="secondary" size="lg" onClick={onBack} disabled={sending} aria-label="Back">

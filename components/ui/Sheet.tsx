@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion, type PanInfo } from "motion/react";
 import { X } from "lucide-react";
 import { useMediaQuery } from "@/lib/hooks";
+import { AutoHeight } from "@/components/motion";
 
 // design.md section 6 motion tokens.
 const springDefault = { type: "spring", bounce: 0, duration: 0.35 } as const;
@@ -105,13 +106,14 @@ export function Sheet({
                 data-close
                 onClick={onClose}
                 aria-label="Close"
-                className="pressable -mr-2 grid h-11 w-11 place-items-center rounded-full text-muted hover:bg-text/5"
+                className="pressable group -mr-2 grid h-11 w-11 place-items-center rounded-full text-muted hover:bg-text/5"
               >
-                <X className="h-5 w-5" aria-hidden />
+                <X className="h-5 w-5 transition-transform duration-300 group-hover:rotate-90" aria-hidden />
               </button>
             </div>
             <div className="overflow-y-auto px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-              {children}
+              {/* Steps and messages change the content's height: grow/shrink instead of jumping. */}
+              <AutoHeight>{children}</AutoHeight>
             </div>
           </motion.div>
         </div>

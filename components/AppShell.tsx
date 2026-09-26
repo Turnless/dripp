@@ -161,7 +161,15 @@ function SideLink({ item, active }: { item: NavItem; active: boolean }) {
           transition={reduce ? { duration: 0 } : springs.snappy}
         />
       )}
-      <item.icon className="relative h-5 w-5" strokeWidth={1.9} aria-hidden />
+      <motion.span
+        key={active ? "on" : "off"}
+        className="relative"
+        initial={active && !reduce ? { scale: 0.6, y: 3 } : false}
+        animate={{ scale: 1, y: 0 }}
+        transition={{ type: "spring", bounce: 0.5, duration: 0.45 }}
+      >
+        <item.icon className="h-5 w-5" strokeWidth={1.9} aria-hidden />
+      </motion.span>
       <span className="relative">{item.label}</span>
     </Link>
   );
@@ -184,7 +192,15 @@ function TabItem({ item, active }: { item: NavItem; active: boolean }) {
           transition={reduce ? { duration: 0 } : springs.snappy}
         />
       )}
-      <item.icon className="relative h-5 w-5" strokeWidth={1.9} aria-hidden />
+      <motion.span
+        key={active ? "on" : "off"}
+        className="relative"
+        initial={active && !reduce ? { scale: 0.6, y: 3 } : false}
+        animate={{ scale: 1, y: 0 }}
+        transition={{ type: "spring", bounce: 0.5, duration: 0.45 }}
+      >
+        <item.icon className="h-5 w-5" strokeWidth={1.9} aria-hidden />
+      </motion.span>
       <span className="relative">{item.label}</span>
     </Link>
   );

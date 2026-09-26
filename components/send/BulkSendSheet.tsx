@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AlertCircle, AlertTriangle, ArrowLeft, BadgeCheck, CheckCircle2, Loader2, X } from "lucide-react";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
-import { springs } from "@/components/motion";
+import { springs, stepVariants, stepVariantsReduced, useStepDirection } from "@/components/motion";
 import { useSendTip } from "@/lib/money-client";
 import { formatUsd, parseUsdToCents } from "@/lib/format";
 import { MAX_BULK_RECIPIENTS, MAX_TIP_CENTS } from "@/lib/fees";
@@ -162,16 +162,19 @@ export function BulkSendSheet({ open, onClose }: { open: boolean; onClose: () =>
     setDone(true);
   }
 
+  const dir = useStepDirection(["who", "amount", "review", "sending"].indexOf(step));
   const title = { who: "Reward your viewers", amount: "How much?", review: "Review", sending: done ? "Done" : "Sending" }[step];
 
   return (
     <Sheet open={open} onClose={onClose} title={title}>
-      <AnimatePresence mode="wait" initial={false}>
+      <AnimatePresence mode="wait" initial={false} custom={dir}>
         <motion.div
           key={step}
-          initial={reduce ? { opacity: 0 } : { opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={reduce ? { opacity: 0 } : { opacity: 0, x: -24 }}
+          custom={dir}
+          variants={reduce ? stepVariantsReduced : stepVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
           transition={reduce ? { duration: 0.12 } : springs.snappy}
           className="flex flex-col gap-5 pt-2"
         >

@@ -43,7 +43,7 @@ export function EmptyState({
 }
 
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <span aria-hidden className={`block animate-pulse rounded-chip bg-text/10 ${className}`} />;
+  return <span aria-hidden className={`skeleton block rounded-chip ${className}`} />;
 }
 
 /** Full-screen centered message on the background field (splash, setup, errors). */

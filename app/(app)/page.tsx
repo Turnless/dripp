@@ -17,7 +17,7 @@ import { ActivityRow } from "@/components/ActivityRow";
 import { useVerifyPhone } from "@/components/VerificationCard";
 import type { ActivityItem, WeekSummary } from "@/app/api/activity/route";
 import { useBalance, useRecentWithWeek } from "@/lib/money-client";
-import { RollingNumber, Stagger, StaggerItem, springs } from "@/components/motion";
+import { RollingNumber, Shine, Stagger, StaggerItem, springs } from "@/components/motion";
 import { formatUsd } from "@/lib/format";
 
 /** Money (home). design.md section 9, screen 3. */
@@ -51,6 +51,7 @@ export default function MoneyPage() {
       <div className="flex flex-col gap-6">
       <StaggerItem>
         <div className="relative overflow-hidden rounded-card bg-brand px-6 pb-6 pt-10 text-center shadow-[0_18px_40px_-18px_rgba(17,17,17,0.35)] lg:flex lg:items-center lg:justify-between lg:gap-8 lg:p-8 lg:text-left">
+          <Shine />
           {/* Money just came in: a chip floats up by the balance */}
           <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center lg:left-8 lg:right-auto lg:top-5 lg:justify-start" aria-live="polite">
             <AnimatePresence>
@@ -178,9 +179,9 @@ export default function MoneyPage() {
 /** Desktop: the last 7 days at a glance. */
 function WeekCard({ week }: { week: WeekSummary | null }) {
   const stats = [
-    { label: "Received", value: week ? formatUsd(week.cents) : "—" },
-    { label: "Tips", value: week ? String(week.count) : "—" },
-    { label: "Supporters", value: week ? String(week.supporters) : "—" },
+    { label: "Received", value: week ? week.cents : null, format: (v: number) => formatUsd(Math.round(v)) },
+    { label: "Tips", value: week ? week.count : null, format: (v: number) => String(Math.round(v)) },
+    { label: "Supporters", value: week ? week.supporters : null, format: (v: number) => String(Math.round(v)) },
   ];
   return (
     <GlassCard className="p-5">
@@ -193,7 +194,7 @@ function WeekCard({ week }: { week: WeekSummary | null }) {
                 i === 0 ? "text-[2rem]" : "text-[1.25rem]"
               }`}
             >
-              {s.value}
+              {s.value === null ? "—" : <RollingNumber value={s.value} format={s.format} />}
             </p>
             <p className={`mt-1.5 text-caption ${i === 0 ? "text-on-brand" : "text-muted"}`}>{s.label}</p>
           </div>

@@ -8,6 +8,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Sheet } from "@/components/ui/Sheet";
 import { readError, useAuthedFetch } from "@/lib/hooks";
 import { useLinkYoutube, type LinkPage } from "@/components/LinkChannel";
+import { DropCheck } from "@/components/motion";
 
 /**
  * Viewer verification, as the viewer sees it: only the outcome, never the
@@ -207,9 +208,7 @@ export function VerifyPhoneSheet({ open, onClose }: { open: boolean; onClose: ()
 
       {step === "done" && (
         <div className="flex flex-col items-center gap-3 rounded-card bg-brand px-6 pb-6 pt-8 text-center text-text">
-          <span className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-on-primary">
-            <BadgeCheck className="h-9 w-9" strokeWidth={2.4} aria-hidden />
-          </span>
+          <DropCheck />
           <p className="mt-2 font-semibold text-on-brand" role="status">
             Streamers can now include you when they reward their viewers.
           </p>

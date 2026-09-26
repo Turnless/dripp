@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { AtSign, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Wordmark } from "@/components/ui/misc";
-import { springs } from "@/components/motion";
+import { springs, Swap } from "@/components/motion";
 import { useAuthedFetch } from "@/lib/hooks";
 import { checkUsername } from "@/lib/usernames";
 
@@ -102,7 +102,7 @@ export function UsernameField({
         className={`min-h-5 text-caption ${good ? "text-positive" : bad ? "text-negative" : "text-muted"}`}
         role="status"
       >
-        {hint}
+        <Swap id={hint}>{hint}</Swap>
       </span>
     </label>
   );

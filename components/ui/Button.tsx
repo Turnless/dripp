@@ -37,8 +37,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...rest}
     >
       {/* Keep the label in the layout while loading so the button never changes width. */}
-      <span className={`inline-flex items-center gap-2 ${loading ? "invisible" : ""}`}>{children}</span>
-      {loading && <Loader2 className="absolute h-5 w-5 animate-spin" aria-hidden />}
+      <span
+        className={`inline-flex items-center gap-2 transition-[opacity,transform] duration-200 ${
+          loading ? "scale-95 opacity-0" : ""
+        }`}
+      >
+        {children}
+      </span>
+      {loading && (
+        <span className="fade-in absolute grid place-items-center" aria-hidden>
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </span>
+      )}
     </button>
   );
 });

@@ -8,7 +8,7 @@ import { ActivityRow } from "@/components/ActivityRow";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
-import { Stagger, StaggerItem, springs } from "@/components/motion";
+import { RollingNumber, Stagger, StaggerItem, springs } from "@/components/motion";
 import { useActivity, type ActivityItem } from "@/lib/money-client";
 import { formatUsd } from "@/lib/format";
 
@@ -175,7 +175,9 @@ function Totals({ items, onSend }: { items: ActivityItem[] | null; onSend: () =>
           {rows.map((r) => (
             <div key={r.label} className="flex items-baseline justify-between gap-4 py-2.5">
               <dt className="text-[0.9375rem] text-muted">{r.label}</dt>
-              <dd className={`num font-extrabold ${r.tone}`}>{formatUsd(r.cents)}</dd>
+              <dd className={`font-extrabold ${r.tone}`}>
+                <RollingNumber value={r.cents} format={(v) => formatUsd(Math.round(v))} />
+              </dd>
             </div>
           ))}
         </dl>

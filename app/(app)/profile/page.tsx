@@ -8,6 +8,7 @@ import { useAccount } from "@/components/account";
 import { ChannelCard } from "@/components/LinkChannel";
 import { VerificationCard } from "@/components/VerificationCard";
 import { UsernameField } from "@/components/UsernamePicker";
+import { SwitchTrack } from "@/components/ui/Switch";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -204,18 +205,7 @@ function VisibilitySheet({ open, onClose }: { open: boolean; onClose: () => void
                     <span className="block font-bold">{o.label}</span>
                     <span className="block text-caption text-muted">{o.detail}</span>
                   </span>
-                  <span
-                    aria-hidden
-                    className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
-                      on ? "bg-primary" : "bg-text/15"
-                    } ${saving === o.key ? "opacity-60" : ""}`}
-                  >
-                    <span
-                      className={`absolute top-1 h-6 w-6 rounded-full shadow transition-all ${
-                        on ? "left-7 bg-brand" : "left-1 bg-white"
-                      }`}
-                    />
-                  </span>
+                  <SwitchTrack on={on} busy={saving === o.key} />
                 </button>
               </li>
             );
@@ -348,16 +338,7 @@ function CryptoOptionCard() {
             Add money from your own wallet, and withdraw to it.
           </span>
         </span>
-        <span
-          aria-hidden
-          className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${on ? "bg-primary" : "bg-text/15"} ${
-            saving ? "opacity-60" : ""
-          }`}
-        >
-          <span
-            className={`absolute top-1 h-6 w-6 rounded-full shadow transition-all ${on ? "left-7 bg-brand" : "left-1 bg-white"}`}
-          />
-        </span>
+        <SwitchTrack on={on} busy={saving} />
       </button>
       {on && (
         <p className="text-caption text-muted">

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { AlertCircle, Check, ChevronRight, Info, ShieldCheck } from "lucide-react";
+import { AlertCircle, ChevronRight, Info, ShieldCheck } from "lucide-react";
 import { isAddress } from "viem";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
 import { useAccount } from "@/components/account";
+import { DropCheck, RollingNumber } from "@/components/motion";
 import { CryptoOptionHint, MercuryoSoonRow } from "@/components/AddMoneySheet";
 import { useWithdraw } from "@/lib/money-client";
 import { formatUsd, parseUsdToCents } from "@/lib/format";
@@ -144,16 +144,16 @@ export function WithdrawSheet({
           <dl className="flex flex-col gap-3 rounded-card border border-text/10 p-4 text-[0.9375rem]">
             <div className="flex justify-between">
               <dt>You withdraw</dt>
-              <dd className="num">{formatUsd(cents)}</dd>
+              <dd><RollingNumber value={cents} duration={0.35} format={(v) => formatUsd(Math.round(v))} /></dd>
             </div>
             <div className="flex justify-between text-muted">
               <dt>dripp fee ({WITHDRAWAL_FEE_PERCENT})</dt>
-              <dd className="num">{formatUsd(fee)}</dd>
+              <dd><RollingNumber value={fee} duration={0.35} format={(v) => formatUsd(Math.round(v))} /></dd>
             </div>
             <div className="h-px bg-text/10" />
             <div className="flex justify-between font-semibold">
               <dt>You receive</dt>
-              <dd className="num">{formatUsd(receive)}</dd>
+              <dd><RollingNumber value={receive} duration={0.35} format={(v) => formatUsd(Math.round(v))} /></dd>
             </div>
           </dl>
 
@@ -190,17 +190,9 @@ export function WithdrawSheet({
 }
 
 function Done({ cents, onClose }: { cents: number; onClose: () => void }) {
-  const reduce = useReducedMotion();
   return (
     <div className="flex flex-col items-center gap-3 rounded-card bg-brand px-6 pb-6 pt-8 text-center text-text">
-      <motion.span
-        initial={reduce ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={reduce ? { duration: 0.15 } : { type: "spring", bounce: 0.3, duration: 0.45 }}
-        className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-on-primary"
-      >
-        <Check className="h-9 w-9" strokeWidth={3} aria-hidden />
-      </motion.span>
+      <DropCheck />
       <p className="num mt-3 text-[3.25rem] font-extrabold leading-none tracking-[-0.05em]">{formatUsd(cents)}</p>
       <p className="font-semibold text-on-brand" role="status">
         On its way to your wallet.

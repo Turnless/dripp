@@ -1,9 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { animate, motion, useInView, useReducedMotion, type Variants } from "motion/react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AnimatePresence, animate, motion, useInView, useReducedMotion, type Variants } from "motion/react";
+import { formatUsd } from "@/lib/format";
 
-// Motion tokens -- design.md section 6. Critically damped by default.
+/*
+ * dripp motion system (design.md section 6).
+ *
+ * - Springs, critically damped by default; `soft` (a little bounce) only for
+ *   celebratory moments -- money arriving, a tip landing, a switch settling.
+ * - Things enter from where they came from: forward steps from the right,
+ *   back from the left; new items from above; sheets from the bottom.
+ * - Nothing jumps: containers resize smoothly (AutoHeight), text swaps
+ *   instead of blinking (Swap), numbers roll instead of changing (RollingNumber).
+ * - Success is always the same mark: a drop falls and becomes a check (DropCheck).
+ * - Every piece falls back to a plain fade with prefers-reduced-motion.
+ */
+// Motion tokens. Critically damped by default.
 export const springs = {
   default: { type: "spring", bounce: 0, duration: 0.5 },
   snappy: { type: "spring", bounce: 0, duration: 0.3 },
@@ -289,4 +302,131 @@ function CheckOrClock({ pending, draw }: { pending: boolean; draw: boolean }) {
       )}
     </svg>
   );
+}
+
+/**
+ * Animates its height to fit its content, so a sheet or card grows and
+ * shrinks smoothly when what's inside changes (a new step, an error line).
+ * Only clips while it's moving, so focus rings and shadows aren't cut off.
+ */
+export function AutoHeight({ children, className }: { children: React.ReactNode; className?: string }) {
+  const inner = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+  const [height, setHeight] = useState<number | "auto">("auto");
+  const [moving, setMoving] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setHeight(entry.contentRect.height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <motion.div
+      initial={false}
+      animate={{ height }}
+      transition={reduce ? { duration: 0 } : springs.default}
+      onAnimationStart={() => setMoving(true)}
+      onAnimationComplete={() => setMoving(false)}
+      style={{ overflow: moving ? "hidden" : "visible" }}
+    >
+      <div ref={inner} className={className}>
+        {children}
+      </div>
+    </motion.div>
+  );
+}
+
+/**
+ * Swaps its content with a short slide + fade whenever `id` changes, instead
+ * of blinking (status lines, hints, labels).
+ */
+export function Swap({ id, children, className }: { id: string; children: React.ReactNode; className?: string }) {
+  const reduce = useReducedMotion();
+  return (
+    <AnimatePresence mode="popLayout" initial={false}>
+      <motion.div
+        key={id}
+        className={className}
+        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8, filter: "blur(3px)" }}
+        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+        exit={reduce ? { opacity: 0 } : { opacity: 0, y: -8, filter: "blur(3px)" }}
+        transition={springs.snappy}
+      >
+        {children}
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+/** An error line that slides in and gives a small shake each time the message changes. */
+export function ErrorText({
+  message,
+  className = "",
+  icon,
+}: {
+  message: string | null;
+  className?: string;
+  icon?: React.ReactNode;
+}) {
+  const reduce = useReducedMotion();
+  return (
+    <AnimatePresence initial={false}>
+      {message && (
+        <motion.p
+          key={message}
+          role="alert"
+          className={className}
+          initial={reduce ? { opacity: 0 } : { opacity: 0, x: 0 }}
+          animate={reduce ? { opacity: 1 } : { opacity: 1, x: [0, -7, 7, -4, 4, 0] }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          {icon}
+          {icon ? " " : null}
+          {message}
+        </motion.p>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/** 1 when a stepper moved forward, -1 when it moved back (for directional slides). */
+export function useStepDirection(index: number) {
+  const prev = useRef(index);
+  const dir = index >= prev.current ? 1 : -1;
+  useEffect(() => {
+    prev.current = index;
+  }, [index]);
+  return dir;
+}
+
+/** Slide variants for a stepper; pass the direction as AnimatePresence/motion `custom`. */
+export const stepVariants: Variants = {
+  enter: (dir: number) => ({ opacity: 0, x: 28 * dir }),
+  center: { opacity: 1, x: 0 },
+  exit: (dir: number) => ({ opacity: 0, x: -28 * dir }),
+};
+export const stepVariantsReduced: Variants = { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } };
+
+/** A single shine that sweeps across a surface once, a moment after it appears. */
+export function Shine({ delay = 0.6 }: { delay?: number }) {
+  const reduce = useReducedMotion();
+  if (reduce) return null;
+  return (
+    <motion.span
+      aria-hidden
+      className="pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+      initial={{ x: "-120%", skewX: -18 }}
+      animate={{ x: "320%" }}
+      transition={{ delay, duration: 1.1, ease: [0.4, 0, 0.2, 1] }}
+    />
+  );
+}
+
+/** CountUp for dollar amounts in cents -- usable from server components (no function props). */
+export function CountUpUsd({ cents, className }: { cents: number; className?: string }) {
+  return <CountUp value={cents} format={(v) => formatUsd(Math.round(v))} className={className} />;
 }

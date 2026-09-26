@@ -5,10 +5,10 @@ import { redirect } from "next/navigation";
 import { ArrowRight, BadgeCheck, Hourglass, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { CountUpUsd, Reveal } from "@/components/motion";
 import { Wordmark } from "@/components/ui/misc";
 import { normalizeHandle } from "@/lib/username-resolve";
 import { supabaseServer } from "@/lib/supabase";
-import { formatUsd } from "@/lib/format";
 import { visibilityFromRow, type ProfileVisibility } from "@/lib/profile-visibility";
 import { youtubeSubscriberCount } from "@/lib/youtube";
 
@@ -132,6 +132,7 @@ export default async function PublicProfilePage({ params }: { params: { handle: 
           <Wordmark />
         </Link>
 
+        <Reveal y={28}>
         <GlassCard level="thick" className="flex flex-col items-center gap-3 px-6 pb-6 pt-8 text-center">
           <span className="relative">
             <Avatar
@@ -188,6 +189,7 @@ export default async function PublicProfilePage({ params }: { params: { handle: 
             </p>
           )}
         </GlassCard>
+        </Reveal>
 
         <Link
           href="/"
@@ -215,7 +217,9 @@ function Total({
   return (
     <div className={`rounded-card p-4 ${highlight ? "bg-brand" : "bg-text/[0.05]"}`}>
       <dt className={`text-caption ${highlight ? "text-on-brand" : "text-muted"}`}>{label}</dt>
-      <dd className="num mt-1 text-[1.75rem] font-extrabold leading-none tracking-[-0.045em]">{formatUsd(cents)}</dd>
+      <dd className="mt-1 text-[1.75rem] font-extrabold leading-none tracking-[-0.045em]">
+        <CountUpUsd cents={cents} />
+      </dd>
       {count !== null && (
         <dd className={`mt-1.5 text-caption ${highlight ? "text-on-brand" : "text-muted"}`}>
           {count} {count === 1 ? "tip" : "tips"}

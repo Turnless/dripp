@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
+import { motion, useReducedMotion } from "motion/react";
+import { springs, Swap } from "@/components/motion";
 import { AlertTriangle, Check, ChevronRight, Copy, CreditCard, Wallet } from "lucide-react";
 import { useAccount } from "@/components/account";
 import { Button } from "@/components/ui/Button";
@@ -75,6 +77,7 @@ export function AddMoneySheet({ open, onClose }: { open: boolean; onClose: () =>
 }
 
 function CryptoDeposit({ address }: { address: string }) {
+  const reduce = useReducedMotion();
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -113,9 +116,15 @@ function CryptoDeposit({ address }: { address: string }) {
       <div className="mx-auto w-44 rounded-2xl bg-white p-3 shadow-[0_1px_3px_rgba(15,14,26,0.1)]">
         {qr ? (
           // Generated locally from the address; no user-supplied markup.
-          <div className="aspect-square w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: qr }} />
+          <motion.div
+            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.9, filter: "blur(8px)" }}
+            animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+            transition={springs.default}
+            className="aspect-square w-full [&>svg]:h-full [&>svg]:w-full"
+            dangerouslySetInnerHTML={{ __html: qr }}
+          />
         ) : (
-          <div className="aspect-square w-full animate-pulse rounded-lg bg-text/[0.06]" />
+          <div className="skeleton aspect-square w-full rounded-lg" />
         )}
       </div>
 
@@ -125,10 +134,10 @@ function CryptoDeposit({ address }: { address: string }) {
         className="pressable flex items-center gap-3 rounded-chip bg-solid/70 px-4 py-3 text-left ring-1 ring-inset ring-text/10 hover:bg-solid"
       >
         <span className="min-w-0 flex-1 break-all font-mono text-[0.8125rem] leading-snug">{address}</span>
-        <span className="inline-flex shrink-0 items-center gap-1 text-caption font-bold">
+        <Swap id={copied ? "copied" : "copy"} className="inline-flex shrink-0 items-center gap-1 text-caption font-bold">
           {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
           {copied ? "Copied" : "Copy"}
-        </span>
+        </Swap>
       </button>
 
       <p className="flex items-start gap-2 rounded-chip bg-negative/10 px-3 py-2.5 text-caption font-semibold text-negative" role="note">
