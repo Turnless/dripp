@@ -17,7 +17,7 @@ primary in the dashboard.
 - [ ] **Pitch video** -- max 2 minutes: the team, the problem, why you're
       building it: TODO link
 - [ ] **Live product link** -- on Monad mainnet, with access instructions and
-      test login credentials for judges: TODO link + credentials
+      test login credentials for judges: https://getdripp.vercel.app + TODO credentials
 - [ ] **Product advertisement** (optional, not judged) -- max 30 seconds:
       TODO link
 

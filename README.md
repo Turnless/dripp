@@ -20,7 +20,7 @@ back to the sender after 30 days.
 
 | | |
 |---|---|
-| Live app | TODO: production URL |
+| Live app | [getdripp.vercel.app](https://getdripp.vercel.app) |
 | Judge login | TODO: test login for judges (see "Judge fast path") |
 | Technical demo (≤3 min) | TODO: YouTube / Loom / Vimeo link, filmed on the live app |
 | Pitch (≤2 min) | TODO: YouTube / Loom / Vimeo link |
@@ -36,14 +36,14 @@ back to the sender after 30 days.
 
 Five minutes, nothing to install, no wallet or keys.
 
-1. Open **TODO: live URL** and sign in with the judge account
+1. Open **[getdripp.vercel.app](https://getdripp.vercel.app)** and sign in with the judge account
    (**TODO: test login**). It already holds a few dollars, so you can tip
    straight away. You never see an address, a seed phrase or a gas prompt.
 2. Go to **Send**, choose the **YouTube** tab and type any channel handle
    (e.g. one that has never heard of dripp). dripp resolves it to the
    channel ID and tells you the tip will wait in escrow until they join.
-3. Open a public profile at **TODO: live URL/u/&lt;username&gt;** and the OBS
-   overlay at **TODO: live URL/overlay/&lt;username&gt;**: this is what a
+3. Open a public profile at **getdripp.vercel.app/u/&lt;username&gt;** and the OBS
+   overlay at **getdripp.vercel.app/overlay/&lt;username&gt;**: this is what a
    streamer puts on screen; tips appear live.
 4. Send a real $0.10 tip to **TODO: demo creator username** on the **dripp** tab, then open
    **Activity**: the tip is there, in dollars. (The matching Monad
