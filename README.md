@@ -5,7 +5,7 @@
 ![USDC](https://img.shields.io/badge/settles%20in-native%20USDC-2775CA)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-**Monad Hackathon** · Consumer Payments track · Monad mainnet, native USDC, Privy smart wallets, Pimlico paymaster
+**Monad Metropolis** · Consumer Products & Payments · Monad mainnet, native USDC, Privy smart wallets, Pimlico paymaster
 
 Live-stream viewers already pay creators, but through platform tips that take
 a cut (YouTube keeps 30% of Super Chat), pay out on the platform's schedule,
@@ -21,31 +21,33 @@ back to the sender after 30 days.
 | | |
 |---|---|
 | Live app | TODO: production URL |
-| Video | [Demo on X](https://x.com/turnless_HQ/status/2103253352217817542), filmed on the live app |
-| Submission post | [x.com/turnless_HQ](https://x.com/turnless_HQ/status/2103253352217817542) |
+| Judge login | TODO: test login for judges (see "Judge fast path") |
+| Technical demo (≤3 min) | TODO: YouTube / Loom / Vimeo link, filmed on the live app |
+| Pitch (≤2 min) | TODO: YouTube / Loom / Vimeo link |
+| Build-in-public post | [x.com/turnless_HQ](https://x.com/turnless_HQ/status/2103253352217817542) |
 | TipVault (escrow) | TODO: `0x...` on the Monad explorer |
 | First mainnet tip | TODO: explorer link - amount, Monad mainnet, date |
 | First escrow claim | TODO: explorer link - claimed by the Privy server wallet after a YouTube link |
 | Cost to the user | $0 to tip (gas paid by the paymaster), 1% only when withdrawing |
 | Tests | 126 Vitest + 20 Foundry (16 unit, 3 invariants, 1 fuzz), run in CI |
-| Nothing simulated | Every tip, escrow deposit, claim and refund is a real Monad mainnet transaction in native Circle USDC |
+| Nothing simulated | Every tip, escrow deposit and claim is a real Monad mainnet transaction in native Circle USDC |
 
 ## Judge fast path
 
 Five minutes, nothing to install, no wallet or keys.
 
-1. Open **TODO: live URL** and sign in with Google. You get a dripp username
-   and a smart wallet; you never see an address or a seed phrase.
+1. Open **TODO: live URL** and sign in with the judge account
+   (**TODO: test login**). It already holds a few dollars, so you can tip
+   straight away. You never see an address, a seed phrase or a gas prompt.
 2. Go to **Send**, choose the **YouTube** tab and type any channel handle
    (e.g. one that has never heard of dripp). dripp resolves it to the
    channel ID and tells you the tip will wait in escrow until they join.
 3. Open a public profile at **TODO: live URL/u/&lt;username&gt;** and the OBS
    overlay at **TODO: live URL/overlay/&lt;username&gt;**: this is what a
    streamer puts on screen; tips appear live.
-4. To send a real tip, you need a few cents of USDC on Monad. Turn on
-   **Profile -> "I use a crypto wallet"**, send USDC to the address shown
-   (TODO: decide whether to offer judges a small test balance), then
-   tip. Open **Activity** and follow the explorer link.
+4. Send a real $0.10 tip to **TODO: demo creator username** on the **dripp** tab, then open
+   **Activity**: the tip is there, in dollars. (The matching Monad
+   transactions for our own test tips are linked in the table above.)
 5. Check the bot/real breakdown on the **Creator** page: who tipped is
    classified as verified, not verified or suspicious before any reward drop.
 
@@ -105,19 +107,42 @@ The browser sends the money, but it never decides what gets recorded:
 - **Least-privilege claim key.** The escrow owner is a Privy server wallet
   whose policy allows only `TipVault.claim` on Monad mainnet.
 
-## Consumer Payments: criteria and evidence
+## Consumer Products & Payments: criteria and evidence
 
-TODO: paste the track's judging criteria verbatim from
-https://hackathon.monad.xyz/tracks/consumer-payments and map each line below.
+The track asks: *what does a financial product look like when onchain rails
+are leveraged as an advantage to design?* Its first suggested idea is
+"payments embedded in social gestures ... tipping a creator -- where the
+financial action feels like a message, not a transaction". dripp is that,
+plus the one thing onchain rails make possible and platforms can't: tipping
+someone who isn't on the app yet.
 
-| What a consumer-payments judge looks for | Evidence in dripp |
+| Criterion (weight) | Evidence in dripp |
 |---|---|
-| A normal person can pay without crypto knowledge | Google sign-in, invisible smart wallet, no gas prompts (`app/providers.tsx`, `showWalletUIs: false`) |
-| Real money on Monad mainnet | Native Circle USDC; tips, escrow claims and gas sponsorship verified on mainnet (links above) |
-| Speed and cost | One sponsored UserOp per tip; tips are free, 1% only on withdrawal (`lib/fees.ts`) |
-| Solves a cold-start problem | Tip anyone before they join, via `contracts/src/TipVault.sol` |
-| Safety of funds | Intent-matched confirmation, one record per log, 30-day refunds, invariant-tested escrow |
-| Fit for Monad | Fast, near-free transfers make one-dollar and one-cent tips practical during a live stream |
+| **Technical Execution (20%)** -- mechanics execute onchain with real conditional logic and settlement | `TipVault` holds a tip **on the condition** that the creator proves their channel (released by `claim` after OAuth) and returns it **on the condition** that 30 days pass unclaimed (`refund`). Native USDC on Monad mainnet, tx links above. Server records nothing it can't match to onchain logs. 20 Foundry tests including 3 invariants. |
+| **Design & Craft (20%)** -- a non-crypto user completes the core flow; the blockchain is invisible | Google sign-in, no addresses, no gas prompts (`showWalletUIs: false`, paymaster pays), amounts in dollars and cents, recipients by YouTube handle or dripp username. Crypto words appear only if the user switches on "I use a crypto wallet" in Profile (off by default). |
+| **Originality & Track Insight (15%)** -- new consumer experience, not a rebranded wallet | Tip any creator **before they join**: the money waits onchain, keyed to their channel ID, until they link it. Platform tips can't do this, and most tip apps start empty because the creator has to sign up first. |
+| **Founder & Market Readiness (25%)** -- a specific, named consumer segment and real understanding of it | See [Who it's for](#who-its-for). |
+| **Traction & Path Forward (20%)** -- user testing and a concrete plan for the next 100 users | See [Traction](#traction) and [The next 100 users](#the-next-100-users). |
+
+## Who it's for
+
+TODO (the highest-weighted criterion, 25%): name one specific segment and
+what you know about them. For example: who the viewers are, which creators
+they watch, how they tip today, what it costs them, and why the current
+options fail them. Use what you've seen first-hand.
+
+## Traction
+
+TODO: the people who have tried it so far: how many, who they are, what
+they did (tips sent, total value, creators who claimed), and what you
+changed because of their feedback. Even five friends counts; link the
+mainnet transactions.
+
+## The next 100 users
+
+TODO: a concrete plan: which creators you'll onboard first, how their
+viewers find dripp (the OBS overlay on stream, "tip me on dripp" links,
+tips waiting for creators who haven't joined), and the numbers you expect.
 
 ## What is real and what is not
 
