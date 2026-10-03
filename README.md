@@ -25,7 +25,7 @@ back to the sender after 30 days.
 | Technical demo (≤3 min) | TODO: YouTube / Loom / Vimeo link, filmed on the live app |
 | Pitch (≤2 min) | TODO: YouTube / Loom / Vimeo link |
 | Build-in-public post | [x.com/turnless_HQ](https://x.com/turnless_HQ/status/2103253352217817542) |
-| TipVault (escrow) | TODO: `0x...` on the Monad explorer |
+| TipVault (escrow) | `0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d` (Monad mainnet) |
 | First mainnet tip | TODO: explorer link - amount, Monad mainnet, date |
 | First escrow claim | TODO: explorer link - claimed by the Privy server wallet after a YouTube link |
 | Cost to the user | $0 to tip (gas paid by the paymaster), 1% only when withdrawing |
