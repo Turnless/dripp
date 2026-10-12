@@ -56,7 +56,7 @@ const FEATURES: { icon: LucideIcon; title: string; body: string; tag: string }[]
   {
     icon: AtSign,
     title: "Tip by username",
-    body: "Type a YouTube or Kick username and send. No bank details, no payment links to copy.",
+    body: "Type a YouTube or dripp username and send. No bank details, no payment links to copy.",
     tag: "Sending",
   },
   {
@@ -93,13 +93,13 @@ const FEATURES: { icon: LucideIcon; title: string; body: string; tag: string }[]
 
 const STEPS = [
   { icon: UserRound, title: "Sign in with Google", body: "No passwords to create and nothing to install." },
-  { icon: CreditCard, title: "Add money", body: "Top up with a card, Apple Pay or Google Pay." },
+  { icon: CreditCard, title: "Add money", body: "Get tipped, or top up from a wallet. Card and bank top-ups are coming soon." },
   { icon: Send, title: "Send a tip", body: "Pick a username and an amount. It arrives in about a second." },
 ];
 
 const AUDIENCES = {
   viewers: [
-    "Tip any creator on YouTube or Kick, even if they've never heard of dripp.",
+    "Tip any creator on YouTube, even if they've never heard of dripp.",
     "Tips are free. The creator gets every cent you send.",
     "See every tip you've sent in one place.",
   ],
@@ -188,7 +188,7 @@ export function Landing() {
             </h1>
             <Reveal delay={0.35}>
               <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">
-                Send money to anyone on YouTube or Kick using just their username. They don&apos;t
+                Send money to anyone on YouTube or dripp using just their username. They don&apos;t
                 need an account first. If they haven&apos;t joined yet, their tips wait for them.
               </p>
             </Reveal>
