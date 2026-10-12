@@ -11,9 +11,9 @@ primary in the dashboard.
 - [ ] **Public GitHub repository** -- fully accessible by
       `metropolis@hackathon.monad.xyz`: https://github.com/Turnless/dripp
       (make it public, or invite that address)
-- [ ] **Technical demo video** -- max 3 minutes, on **YouTube, Loom or Vimeo**
+- [x] **Technical demo video** -- max 3 minutes, on **YouTube, Loom or Vimeo**
       (an X post doesn't count), showing the live working product, not slides
-      or code: TODO link
+      or code: https://youtu.be/ceN2N5Winp8
 - [ ] **Pitch video** -- max 2 minutes: the team, the problem, why you're
       building it: TODO link
 - [ ] **Live product link** -- on Monad mainnet, with access instructions and

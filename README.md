@@ -22,7 +22,7 @@ back to the sender after 30 days.
 |---|---|
 | Live app | [getdripp.vercel.app](https://getdripp.vercel.app) |
 | Judge login | TODO: test login for judges (see "Judge fast path") |
-| Technical demo (≤3 min) | TODO: YouTube / Loom / Vimeo link, filmed on the live app |
+| Technical demo (≤3 min) | [youtu.be/ceN2N5Winp8](https://youtu.be/ceN2N5Winp8), filmed on the live app |
 | Pitch (≤2 min) | TODO: YouTube / Loom / Vimeo link |
 | Build-in-public post | [x.com/turnless_HQ](https://x.com/turnless_HQ/status/2103253352217817542) |
 | TipVault (escrow) | `0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d` (Monad mainnet) |
