@@ -56,16 +56,15 @@ TipVault escrow contract for tips to creators who haven't joined.
 
 | | Address |
 |---|---|
-| TipVault | `0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d` |
+| TipVault | [`0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d`](https://monadvision.com/address/0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d) |
 | USDC (Circle, native) | TODO (from Circle's official list) |
-| TipVault owner (Privy server wallet, claim-only policy) | TODO |
+| TipVault owner (Privy server wallet, claim-only policy) | `0x06545b4F72e42EFf3890516689FcEf2fd40E37d9` |
 | Treasury (1% withdrawal fee) | `0xdEF6180703c449dcF05c48135f34F9CA6FCAdf1C` |
 
 ## Evidence
 
 | | Link |
 |---|---|
-| First mainnet tip | TODO |
-| First escrow deposit | TODO |
-| First escrow claim | TODO |
+| Escrow deposit (0.5 USDC, gas sponsored) | https://monadvision.com/tx/0x8bd799f88de4bbcf758192a3a5557f84b2dc2d8e9b4d3985449058b4b00be8dc |
+| Escrow claim (0.5 USDC, 2 min 17 s later) | https://monadvision.com/tx/0xc951aa89456d16958e3fe03e5f5765fe2dc1d0c70ff9455593b962ecbfbc3c98 |
 | CI run | https://github.com/Turnless/dripp/actions/workflows/ci.yml |
