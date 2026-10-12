@@ -57,7 +57,7 @@ TipVault escrow contract for tips to creators who haven't joined.
 | | Address |
 |---|---|
 | TipVault | [`0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d`](https://monadvision.com/address/0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d) |
-| USDC (Circle, native) | TODO (from Circle's official list) |
+| USDC (Circle, native) | `0xF77A90B291A6097A9eb9A90629E00A58F5E8FB90` |
 | TipVault owner (Privy server wallet, claim-only policy) | `0x06545b4F72e42EFf3890516689FcEf2fd40E37d9` |
 | Treasury (1% withdrawal fee) | `0xdEF6180703c449dcF05c48135f34F9CA6FCAdf1C` |
 

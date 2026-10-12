@@ -23,7 +23,6 @@ back to the sender after 30 days.
 | Live app | [getdripp.vercel.app](https://getdripp.vercel.app) |
 | Judge login | Your own Google account, no test credentials needed (see "Judge fast path") |
 | Technical demo (≤3 min) | [youtu.be/ceN2N5Winp8](https://youtu.be/ceN2N5Winp8), filmed on the live app |
-| Pitch (≤2 min) | TODO: YouTube / Loom / Vimeo link |
 | Build-in-public post | [x.com/turnless_HQ](https://x.com/turnless_HQ/status/2103253352217817542) |
 | TipVault (escrow) | [`0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d`](https://monadvision.com/address/0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d) (Monad mainnet) |
 | Escrow deposit | [`0x8bd7…e8dc`](https://monadvision.com/tx/0x8bd799f88de4bbcf758192a3a5557f84b2dc2d8e9b4d3985449058b4b00be8dc) - 0.5 USDC tipped to a creator who hadn't joined, held in TipVault. Sent as a gas-sponsored UserOperation (the user paid no gas). Oct 11, 2026 |
