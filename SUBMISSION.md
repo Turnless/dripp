@@ -8,7 +8,7 @@ primary in the dashboard.
 
 - [ ] **Project logo/graphic** -- JPG, JPEG, PNG or WEBP, max 3MB
       (dripp-logo.png, 1024x1024, the app icon)
-- [ ] **Public GitHub repository** -- fully accessible by
+- [x] **Public GitHub repository** -- fully accessible by
       `metropolis@hackathon.monad.xyz`: https://github.com/Turnless/dripp
       (make it public, or invite that address)
 - [x] **Technical demo video** -- max 3 minutes, on **YouTube, Loom or Vimeo**
@@ -16,7 +16,7 @@ primary in the dashboard.
       or code: https://youtu.be/ceN2N5Winp8
 - [x] **Pitch video** -- max 2 minutes: the team, the problem, why you're
       building it: https://youtu.be/s4N8itrQBrQ
-- [ ] **Live product link** -- on Monad mainnet, with access instructions and
+- [x] **Live product link** -- on Monad mainnet, with access instructions and
       test login credentials for judges: https://getdripp.vercel.app; judges sign in
       with their own Google account (no test credentials needed)
 - [ ] **Product advertisement** (optional, not judged) -- max 30 seconds:
