@@ -7,7 +7,7 @@ primary in the dashboard.
 ## Deliverables
 
 - [ ] **Project logo/graphic** -- JPG, JPEG, PNG or WEBP, max 3MB
-      (`app/icon.svg` exported to PNG works)
+      (dripp-logo.png, 1024x1024, the app icon)
 - [ ] **Public GitHub repository** -- fully accessible by
       `metropolis@hackathon.monad.xyz`: https://github.com/Turnless/dripp
       (make it public, or invite that address)
@@ -17,7 +17,8 @@ primary in the dashboard.
 - [ ] **Pitch video** -- max 2 minutes: the team, the problem, why you're
       building it: TODO link
 - [ ] **Live product link** -- on Monad mainnet, with access instructions and
-      test login credentials for judges: https://getdripp.vercel.app + TODO credentials
+      test login credentials for judges: https://getdripp.vercel.app; judges sign in
+      with their own Google account (no test credentials needed)
 - [ ] **Product advertisement** (optional, not judged) -- max 30 seconds:
       TODO link
 
@@ -36,9 +37,16 @@ gas-sponsored smart wallet. If the creator hasn't joined yet, the money waits
 in the TipVault escrow contract, keyed to their channel ID, until they link
 the channel, and goes back to the sender after 30 days if nobody claims it.
 
-**Who it's for:** TODO (same as README "Who it's for")
+**Who it's for:** Streamers first, especially small ones, whom platform tipping
+serves worst; then community leaders who reward members (bulk sends with a
+bot check), and individuals sending money by username. None of them need to
+think of themselves as crypto users.
 
-**Traction:** TODO (same as README "Traction")
+**Traction:** Honest status: the full flow (tips, escrow deposits, escrow
+claims) works on Monad mainnet with real USDC, tested with our own accounts.
+No outside streamers are using it yet. Next: onboard five small YouTube
+streamers, each adding the on-stream tip alert, so their viewers become the
+next users.
 
 **How it uses Monad:** native Circle USDC on Monad mainnet for every tip;
 Kernel smart wallets with a Pimlico paymaster so users pay no gas; the
