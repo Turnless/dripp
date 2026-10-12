@@ -52,6 +52,40 @@ next users.
 Kernel smart wallets with a Pimlico paymaster so users pay no gas; the
 TipVault escrow contract for tips to creators who haven't joined.
 
+**Go-to-market and user acquisition:**
+
+dripp starts with one group: small YouTube streamers, the creators today's
+tipping serves worst (Twitch holds earnings until $100, and card fees take
+almost a third of a $1 tip). Every new user after them comes through
+something already built into the product.
+
+1. Five streamers, onboarded by hand. dripp has no outside streamers yet,
+   so the first step is direct outreach to small YouTube streamers: help
+   each one link their channel, add the dripp tip alert to OBS (one browser
+   link) and put their dripp page (getdripp.vercel.app/u/username) in their
+   stream description and panels.
+2. Their viewers. A tip alert on stream shows the whole chat that tipping
+   works and takes seconds. A viewer who wants to tip signs in with Google
+   and sends; no wallet or crypto step to lose them. Each streamer is a
+   distribution channel to their own audience.
+3. Tips that wait. A viewer can tip any YouTube creator, even one who has
+   never heard of dripp. The tip waits in escrow for 30 days, so the
+   creator has money to collect and a reason to join, and brings their own
+   audience when they do. This turns viewers into the people who recruit
+   creators, which also fixes the cold start every tipping app has.
+4. Community leaders. Moderators, organisers and people running giveaways
+   can reward many members in one bulk send. The bot/real check stops fake
+   accounts from farming a drop, so a reward reaches real people, and every
+   person who receives one has an account and a balance to spend.
+
+Why this can grow cheaply: sending a tip costs the user nothing (gas is
+sponsored), and dripp earns 1% only when someone withdraws, so it makes
+money only when real money has moved through it.
+
+What we will measure: streamers with the tip alert live, viewers who send a
+first tip, escrowed tips that get claimed, and how many new creators join
+because a tip was waiting for them.
+
 ## Addresses (Monad mainnet)
 
 | | Address |
