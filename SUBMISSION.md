@@ -14,8 +14,8 @@ primary in the dashboard.
 - [x] **Technical demo video** -- max 3 minutes, on **YouTube, Loom or Vimeo**
       (an X post doesn't count), showing the live working product, not slides
       or code: https://youtu.be/ceN2N5Winp8
-- [ ] **Pitch video** -- max 2 minutes: the team, the problem, why you're
-      building it: TODO link
+- [x] **Pitch video** -- max 2 minutes: the team, the problem, why you're
+      building it: https://youtu.be/s4N8itrQBrQ
 - [ ] **Live product link** -- on Monad mainnet, with access instructions and
       test login credentials for judges: https://getdripp.vercel.app; judges sign in
       with their own Google account (no test credentials needed)
