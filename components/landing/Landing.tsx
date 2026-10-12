@@ -93,7 +93,7 @@ const FEATURES: { icon: LucideIcon; title: string; body: string; tag: string }[]
 
 const STEPS = [
   { icon: UserRound, title: "Sign in with Google", body: "No passwords to create and nothing to install." },
-  { icon: CreditCard, title: "Add money", body: "Top up with a card, Apple Pay or Google Pay." },
+  { icon: CreditCard, title: "Add money", body: "Card and bank top-ups are coming soon." },
   { icon: Send, title: "Send a tip", body: "Pick a username and an amount. It arrives in about a second." },
 ];
 

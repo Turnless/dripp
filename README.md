@@ -21,35 +21,36 @@ back to the sender after 30 days.
 | | |
 |---|---|
 | Live app | [getdripp.vercel.app](https://getdripp.vercel.app) |
-| Judge login | TODO: test login for judges (see "Judge fast path") |
-| Technical demo (≤3 min) | TODO: YouTube / Loom / Vimeo link, filmed on the live app |
-| Pitch (≤2 min) | TODO: YouTube / Loom / Vimeo link |
+| Judge login | Your own Google account, no test credentials needed (see "Judge fast path") |
+| Technical demo (≤3 min) | [youtu.be/ceN2N5Winp8](https://youtu.be/ceN2N5Winp8), filmed on the live app |
+| Pitch (≤2 min) | [youtu.be/s4N8itrQBrQ](https://youtu.be/s4N8itrQBrQ) |
 | Build-in-public post | [x.com/turnless_HQ](https://x.com/turnless_HQ/status/2103253352217817542) |
-| TipVault (escrow) | `0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d` (Monad mainnet) |
-| First mainnet tip | TODO: explorer link - amount, Monad mainnet, date |
-| First escrow claim | TODO: explorer link - claimed by the Privy server wallet after a YouTube link |
+| TipVault (escrow) | [`0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d`](https://monadvision.com/address/0xF8B5DDE0D954cB2De3A3d17fecd81Dbfe00CC68d) (Monad mainnet) |
+| Escrow deposit | [`0x8bd7…e8dc`](https://monadvision.com/tx/0x8bd799f88de4bbcf758192a3a5557f84b2dc2d8e9b4d3985449058b4b00be8dc) - 0.5 USDC tipped to a creator who hadn't joined, held in TipVault. Sent as a gas-sponsored UserOperation (the user paid no gas). Oct 11, 2026 |
+| Escrow claim | [`0xc951…3c98`](https://monadvision.com/tx/0xc951aa89456d16958e3fe03e5f5765fe2dc1d0c70ff9455593b962ecbfbc3c98) - the creator linked YouTube and the 0.5 USDC was released to them by TipVault's owner, **2 min 17 s after the deposit**. Oct 11, 2026 |
 | Cost to the user | $0 to tip (gas paid by the paymaster), 1% only when withdrawing |
 | Tests | 126 Vitest + 20 Foundry (16 unit, 3 invariants, 1 fuzz), run in CI |
 | Nothing simulated | Every tip, escrow deposit and claim is a real Monad mainnet transaction in native Circle USDC |
 
 ## Judge fast path
 
-Five minutes, nothing to install, no wallet or keys.
+Five minutes, nothing to install, no wallet or keys. Sign in with your own
+Google account; dripp creates everything else.
 
-1. Open **[getdripp.vercel.app](https://getdripp.vercel.app)** and sign in with the judge account
-   (**TODO: test login**). It already holds a few dollars, so you can tip
-   straight away. You never see an address, a seed phrase or a gas prompt.
-2. Go to **Send**, choose the **YouTube** tab and type any channel handle
-   (e.g. one that has never heard of dripp). dripp resolves it to the
-   channel ID and tells you the tip will wait in escrow until they join.
-3. Open a public profile at **getdripp.vercel.app/u/&lt;username&gt;** and the OBS
-   overlay at **getdripp.vercel.app/overlay/&lt;username&gt;**: this is what a
-   streamer puts on screen; tips appear live.
-4. Send a real $0.10 tip to **TODO: demo creator username** on the **dripp** tab, then open
-   **Activity**: the tip is there, in dollars. (The matching Monad
-   transactions for our own test tips are linked in the table above.)
-5. Check the bot/real breakdown on the **Creator** page: who tipped is
-   classified as verified, not verified or suspicious before any reward drop.
+1. Open **[getdripp.vercel.app](https://getdripp.vercel.app)** and sign in
+   with Google. Pick a username. You never see an address, a seed phrase or
+   a gas prompt.
+2. Go to **Send**, choose the **YouTube** tab and type any channel handle,
+   for example a creator who has never heard of dripp. dripp finds the
+   channel and shows "Hasn't joined yet" and "We'll hold it until they join
+   and link their channel."
+3. Your public page is at **getdripp.vercel.app/u/&lt;your username&gt;**.
+   Choose what it shows under **Profile -> What people see**.
+4. Open the **Creator** page: "Tip alerts on stream" (the OBS overlay link)
+   and "Who's tipping you" (verified / not verified / suspicious tippers).
+5. A new account starts at $0, so the full money flow (a tip, an escrowed
+   tip, the creator linking YouTube and collecting it) is shown in the
+   [technical demo](https://youtu.be/ceN2N5Winp8), filmed on this live app.
 
 ## The problem
 
@@ -126,23 +127,41 @@ someone who isn't on the app yet.
 
 ## Who it's for
 
-TODO (the highest-weighted criterion, 25%): name one specific segment and
-what you know about them. For example: who the viewers are, which creators
-they watch, how they tip today, what it costs them, and why the current
-options fail them. Use what you've seen first-hand.
+dripp is for people who get paid by a community, starting with the one the
+product is built around:
+
+1. **Streamers, especially small ones.** They are the ones platform tipping
+   serves worst: payout thresholds hold their money back, fixed card fees
+   eat small tips, and fans can't tip them on a new app until they sign up.
+   dripp's escrow is built for exactly this: fans can tip them first, and
+   the money waits until they claim it.
+2. **Community leaders** who reward members: moderators, organisers,
+   people running giveaways. Bulk sends tip many people at once, and the
+   bot/real check stops fake accounts from farming a reward drop.
+3. **Individuals** sending each other money by username, with no bank
+   details and nothing to install.
+
+All three are people who don't think of themselves as crypto users. They
+sign in with Google and see dollars.
 
 ## Traction
 
-TODO: the people who have tried it so far: how many, who they are, what
-they did (tips sent, total value, creators who claimed), and what you
-changed because of their feedback. Even five friends counts; link the
-mainnet transactions.
+Honest status: dripp has been in build until now. The full flow (tips,
+escrow deposits, escrow claims) has been tested on Monad mainnet with our
+own accounts and real USDC, but **no outside streamers are using it yet**.
 
 ## The next 100 users
 
-TODO: a concrete plan: which creators you'll onboard first, how their
-viewers find dripp (the OBS overlay on stream, "tip me on dripp" links,
-tips waiting for creators who haven't joined), and the numbers you expect.
+1. **Five streamers first.** Onboard five small YouTube streamers we can
+   reach directly. Each one links their channel, adds the OBS tip alert to
+   their stream, and shares their dripp page.
+2. **Their viewers are the next users.** Every tip alert on stream shows
+   viewers that tipping works, and every tipper signs up to send one.
+3. **Tips that wait bring creators in.** A viewer can tip a creator who
+   isn't on dripp yet; that creator has a reason to join and collect it,
+   and brings their own audience.
+4. **Community rewards.** One community leader rewarding their members
+   with a bulk send puts dripp in front of everyone who receives one.
 
 ## What is real and what is not
 
